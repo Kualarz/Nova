@@ -1,0 +1,28 @@
+{
+  "name": "nova",
+  "version": "1.0.0",
+  "description": "NOVA — Next-Order Virtual Ally",
+  "main": "dist/index.js",
+  "scripts": {
+    "nova": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "tsx"
+  },
+  "keywords": [],
+  "author": "Jimmy",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@supabase/supabase-js": "^2.103.3",
+    "chalk": "^4.1.2",
+    "dotenv": "^17.4.2",
+    "openai": "^6.34.0",
+    "rss-parser": "^3.13.0",
+    "zod": "^4.3.6"
+  }
+}

@@ -1,0 +1,31 @@
+# Secrets — never commit
+.env
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Workspace personal data — git-ignore by default
+# If you want workspace under version control, use a separate private repo
+workspace/memory/
+workspace/MEMORY.md
+workspace/USER.md
+workspace/SOUL.md
+workspace/AGENTS.md
+workspace/news-feeds.yaml
+
+# Google OAuth token (written on first auth)
+.google-token.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+
+# Claude Code — local/machine-specific settings and worktrees
+.claude/settings.local.json
+.claude/worktrees/
