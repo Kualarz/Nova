@@ -7,11 +7,11 @@
 
 Phase 1 delivered a terminal chat ally with durable three-tier memory and a set of tools. It worked — but it requires a paid Anthropic API, only runs when manually launched, and has no voice or visual presence.
 
-Phase 2 transforms NOVA into something fundamentally different: a free, always-on desktop companion that listens for your voice, speaks back, proactively checks in, manages its own skills, and gives you a web dashboard to control everything. It runs entirely on your hardware — no API bills for daily use.
+Phase 2 transforms NOVA into something fundamentally different: a free, optionally always-on desktop companion that listens for your voice, speaks back, proactively checks in, manages its own skills, and gives you a web dashboard to control everything. It runs entirely on your hardware — no API bills for daily use.
 
 **Phase 2 Goals:**
 - Replace all paid AI APIs with free local alternatives (Ollama)
-- NOVA stays alive whenever your PC is on — no manual launch
+- NOVA can auto-start with Windows — **user-controlled, off by default**
 - Full voice conversation (speak to it, it speaks back)
 - Proactive — NOVA initiates check-ins, reminders, and alerts
 - Skills system — capabilities as loadable markdown files (same concept Claude Code uses)
@@ -413,7 +413,11 @@ renderer/                 ← Overlay UI (HTML/CSS/TS)
 - Draggable — user positions it anywhere on screen
 
 ### Windows Auto-Start
-NOVA registers itself in Windows startup using the `auto-launch` npm package. First launch prompts: "Start NOVA automatically with Windows? [Yes / Not now]". Setting toggleable from web dashboard.
+**Off by default.** NOVA does not register itself in Windows startup unless the user explicitly enables it. First-launch prompt: "Would you like NOVA to start automatically with Windows? (You can change this anytime in Settings)". Options: [Yes, auto-start] / [No, I'll launch it manually].
+
+Toggled from web dashboard Settings → Startup. Implemented via the `auto-launch` npm package. Uninstalling NOVA removes the startup entry automatically.
+
+This is a user preference — not an assumption. Some users want always-on; others prefer to launch manually for privacy or performance reasons.
 
 ---
 
@@ -440,7 +444,12 @@ NOVA passively monitors audio using a lightweight keyword detector (`porcupine` 
 **Always listening**
 Microphone is always open. Whisper processes audio in 3-second chunks, detecting speech vs. silence. Any speech longer than 1 second is transcribed and sent to NOVA. Highest CPU usage. Best for hands-free workflows.
 
-**Mode switching:** "Hey NOVA, switch to push-to-talk mode" or via web dashboard toggle.
+> **Privacy note:** Always-listening mode keeps your microphone open continuously. All processing is 100% local — no audio ever leaves your machine. However, for users who are sensitive about microphone access, push-to-talk is recommended. Always-listening is **opt-in only** — it cannot be set as the default in settings; the user must explicitly switch to it.
+
+**Voice entirely disabled**
+A fourth option: voice features are fully off. No microphone access, no TTS. NOVA is text-only. For users who want maximum privacy or are in a shared/office environment.
+
+**Mode switching:** "Hey NOVA, switch to push-to-talk mode" or via web dashboard toggle. Current mode always visible in the tray icon tooltip and the web dashboard header.
 
 ### Voice Pipeline Flow
 ```
@@ -718,7 +727,7 @@ Install Whisper.cpp and Piper. Build `stt.ts`, `tts.ts`, `wake-word.ts`, `push-t
 ### Step 12 — Windows Auto-Start + Polish
 Register auto-launch. Add startup prompt ("Start with Windows?"). Polish overlay animations. Add error recovery (failed tool doesn't crash session). Performance pass (startup time, memory usage).
 
-**Checkpoint:** Reboot PC — NOVA tray icon appears automatically. All features work. No crashes in 30 minutes of use.
+**Checkpoint:** Enable auto-start in Settings → reboot → NOVA tray icon appears. Disable auto-start → reboot → NOVA does not launch. Enable "always listening" from dashboard → microphone activates. Switch to "disabled" → no microphone access. All features work. No crashes in 30 minutes of use.
 
 ---
 
@@ -737,8 +746,8 @@ OPENROUTER_API_KEY=                   # optional — unlocks paid models
 DATABASE_TYPE=sqlite                  # sqlite | supabase
 SQLITE_PATH=./workspace/nova.db       # used when DATABASE_TYPE=sqlite
 
-# Voice
-VOICE_MODE=push-to-talk               # push-to-talk | wake-word | always-on
+# Voice (all opt-in — push-to-talk is the safe default)
+VOICE_MODE=push-to-talk               # push-to-talk | wake-word | always-on | disabled
 VOICE_HOTKEY=F12
 WAKE_WORD=hey nova
 WHISPER_MODEL=base                    # base | small | medium
