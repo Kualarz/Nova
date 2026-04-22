@@ -92,7 +92,7 @@ export async function runSession(): Promise<void> {
   const conversationId = await startConversation();
   await logEvent('session_start', { conversation_id: conversationId });
 
-  let systemPrompt = buildBaseSystemPrompt();
+  let systemPrompt = await buildBaseSystemPrompt();
   const history: Message[] = [];
   let tier3Injected = false;
 

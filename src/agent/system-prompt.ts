@@ -1,6 +1,7 @@
 import { loadWorkspace } from '../workspace/loader.js';
 import { getTier2Context } from '../memory/tier2-daily.js';
 import { searchTier3 } from '../memory/tier3-semantic.js';
+import { getSkillLoader } from '../skills/loader.js';
 
 function currentDateTime(): string {
   return new Date().toLocaleString('en-AU', {
@@ -14,9 +15,10 @@ function currentDateTime(): string {
   });
 }
 
-export function buildBaseSystemPrompt(): string {
+export async function buildBaseSystemPrompt(): Promise<string> {
   const ws = loadWorkspace();
   const tier2 = getTier2Context();
+  const skillsContext = await getSkillLoader().buildSkillsPrompt();
 
   const parts: string[] = [
     ws.soul,
@@ -29,7 +31,11 @@ export function buildBaseSystemPrompt(): string {
     parts.push(`## Recent Context (last 2 days)\n${tier2}`);
   }
 
-  parts.push(`## Current Session\n- ${currentDateTime()} (Melbourne, Australia)\n- Phase 1: work-hours terminal session`);
+  parts.push(`## Current Session\n- ${currentDateTime()} (Melbourne, Australia)\n- Phase 2: Skills System active`);
+
+  if (skillsContext) {
+    parts.push(skillsContext);
+  }
 
   return parts.join('\n\n---\n\n');
 }

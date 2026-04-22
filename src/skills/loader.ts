@@ -37,9 +37,6 @@ export class SkillLoader {
         const parsed = matter(raw);
         const fm = parsed.data as Partial<SkillFrontmatter>;
 
-        // Skip if explicitly disabled
-        if (fm.enabled === false) continue;
-
         // Name defaults to filename without .md
         const name = fm.name ?? file.replace(/\.md$/, '');
         const description = fm.description ?? '';
@@ -47,6 +44,9 @@ export class SkillLoader {
         const reversible = fm.reversible !== false; // default true
         const enabled = fm.enabled !== false;       // default true
         const body = parsed.content.trim();
+
+        // Skip disabled skills
+        if (!enabled) continue;
 
         skills.push({ name, description, tools, reversible, enabled, body, filePath });
       } catch (err) {
