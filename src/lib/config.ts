@@ -5,16 +5,33 @@ import * as path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const ConfigSchema = z.object({
-  ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
-  OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required'),
-  SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
-  GOOGLE_CREDENTIALS_PATH: z.string().default(''), // Optional — Calendar/Gmail tools require Step 7 OAuth setup
-  NOTION_API_KEY: z.string().default(''),         // Optional — Notion tools won't work without it
-  WEB_SEARCH_API_KEY: z.string().default(''),     // Optional — web search won't work without it
-  OPENWEATHER_API_KEY: z.string().default(''),    // Optional — weather tool won't work without it
+  // Required — core infrastructure
+  SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL').default(''),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
   NOVA_USER_ID: z.union([z.literal(''), z.string().uuid()]).default(''),
   NOVA_WORKSPACE_PATH: z.string().min(1, 'NOVA_WORKSPACE_PATH is required'),
+
+  // AI providers — Ollama is default (free, local)
+  MODEL_PROVIDER: z.enum(['ollama', 'openrouter']).default('ollama'),
+  DEFAULT_MODEL: z.string().default('gemma3:4b'),
+  COMPLEX_MODEL: z.string().default(''),
+  EMBED_MODEL: z.string().default('nomic-embed-text'),
+  OLLAMA_HOST: z.string().default('http://localhost:11434'),
+  OPENROUTER_API_KEY: z.string().default(''),
+
+  // Database — local PGlite is default (zero setup)
+  DATABASE_TYPE: z.enum(['local', 'supabase']).default('local'),
+  PGLITE_PATH: z.string().default('./workspace/nova.db'),
+
+  // Optional paid APIs (legacy — kept for backward compat)
+  ANTHROPIC_API_KEY: z.string().default(''),
+  OPENAI_API_KEY: z.string().default(''),
+
+  // Optional tool API keys
+  GOOGLE_CREDENTIALS_PATH: z.string().default(''),
+  NOTION_API_KEY: z.string().default(''),
+  WEB_SEARCH_API_KEY: z.string().default(''),
+  OPENWEATHER_API_KEY: z.string().default(''),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -34,4 +51,8 @@ export function getConfig(): Config {
 
   _config = result.data;
   return _config;
+}
+
+export function resetConfig(): void {
+  _config = undefined;
 }
