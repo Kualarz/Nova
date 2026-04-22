@@ -1,7 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
 import * as readline from 'readline';
 import chalk from 'chalk';
 import { getConfig } from '../lib/config.js';
+import { getModelRouter } from '../providers/router.js';
+import type { Message } from '../providers/interface.js';
 import { buildBaseSystemPrompt, buildTier3Injection } from './system-prompt.js';
 import { startConversation, appendMessage, endConversation } from '../conversations/store.js';
 import { logEvent } from '../events/log.js';
@@ -11,140 +12,91 @@ import { reconcileMemories } from '../memory/reconcile.js';
 import { toApiTools, executeTool } from './tools/index.js';
 import { handleSlashCommand, isSlashCommand } from './slash-commands.js';
 
-const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
-
-type ApiMessage = Anthropic.MessageParam;
-type ContentBlockParam = Anthropic.ContentBlockParam;
-
-let client: Anthropic | undefined;
-
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: getConfig().ANTHROPIC_API_KEY });
-  return client;
-}
-
-function buildTranscript(history: ApiMessage[]): string {
+function buildTranscript(history: Message[]): string {
   return history
+    .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => {
-      if (m.role === 'user') {
-        const content = Array.isArray(m.content)
-          ? m.content
-              .map(b => {
-                if (typeof b === 'string') return b;
-                if (b.type === 'text') return b.text;
-                if (b.type === 'tool_result') return `[tool result]`;
-                return '';
-              })
-              .join('')
-          : m.content;
-        return `Jimmy: ${content}`;
-      } else {
-        const content = Array.isArray(m.content)
-          ? m.content
-              .map((b: ContentBlockParam) => {
-                if (b.type === 'text') return b.text;
-                if (b.type === 'tool_use') return `[called ${b.name}]`;
-                return '';
-              })
-              .join('')
-          : m.content;
-        return `NOVA: ${content}`;
+      if (m.tool_calls?.length) {
+        const names = m.tool_calls.map(tc => tc.function.name).join(', ');
+        return `NOVA: [called ${names}]`;
       }
+      const text = m.content ?? '';
+      return m.role === 'user' ? `Jimmy: ${text}` : `NOVA: ${text}`;
     })
     .join('\n');
 }
 
-/**
- * Run a single Claude turn, handling tool-use loops automatically.
- * Returns the final assistant text.
- */
 async function runTurn(
   systemPrompt: string,
-  history: ApiMessage[]
-): Promise<{ text: string; newMessages: ApiMessage[] }> {
+  history: Message[]
+): Promise<{ text: string; newMessages: Message[] }> {
   const tools = toApiTools();
-  const added: ApiMessage[] = [];
+  const added: Message[] = [];
+  const router = getModelRouter();
 
-  let messages = [...history];
+  let messages: Message[] = [
+    { role: 'system', content: systemPrompt },
+    ...history,
+  ];
 
   for (let i = 0; i < 10; i++) {
-    const response = await getClient().messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages,
-      tools,
-    });
+    const response = await router.chat(messages, { tools });
 
-    if (response.stop_reason === 'end_turn') {
-      const text = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-        .map(b => b.text)
-        .join('');
-      added.push({ role: 'assistant', content: response.content });
+    if (response.stop_reason === 'stop') {
+      const text = response.content ?? '';
+      const msg: Message = { role: 'assistant', content: text };
+      added.push(msg);
       return { text, newMessages: added };
     }
 
-    if (response.stop_reason === 'tool_use') {
-      // Add assistant message with tool_use blocks to history
-      const assistantMsg: ApiMessage = { role: 'assistant', content: response.content };
+    if (response.stop_reason === 'tool_calls' && response.tool_calls?.length) {
+      const assistantMsg: Message = {
+        role: 'assistant',
+        content: response.content,
+        tool_calls: response.tool_calls,
+      };
       added.push(assistantMsg);
       messages = [...messages, assistantMsg];
 
-      // Execute each tool call and collect results
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of response.content) {
-        if (block.type !== 'tool_use') continue;
-
+      for (const toolCall of response.tool_calls) {
         let toolOutput: string;
         try {
-          console.log(chalk.dim(`  [tool] ${block.name}(${JSON.stringify(block.input)})`));
-          toolOutput = await executeTool(block.name, block.input as Record<string, unknown>);
+          const toolInput = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+          console.log(chalk.dim(`  [tool] ${toolCall.function.name}(${toolCall.function.arguments})`));
+          toolOutput = await executeTool(toolCall.function.name, toolInput);
         } catch (err) {
           toolOutput = `Error: ${(err as Error).message}`;
         }
 
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
+        const resultMsg: Message = {
+          role: 'tool',
           content: toolOutput,
-        });
+          tool_call_id: toolCall.id,
+        };
+        added.push(resultMsg);
+        messages = [...messages, resultMsg];
       }
-
-      // Feed tool results back as a user message
-      const toolResultMsg: ApiMessage = { role: 'user', content: toolResults };
-      added.push(toolResultMsg);
-      messages = [...messages, toolResultMsg];
       continue;
     }
 
-    // Unexpected stop reason — return what we have
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map(b => b.text)
-      .join('');
-    added.push({ role: 'assistant', content: response.content });
+    const text = response.content ?? '';
+    added.push({ role: 'assistant', content: text });
     return { text, newMessages: added };
   }
 
-  return {
-    text: '[Max tool iterations reached]',
-    newMessages: added,
-  };
+  return { text: '[Max tool iterations reached]', newMessages: added };
 }
 
 export async function runSession(): Promise<void> {
+  const config = getConfig();
   const conversationId = await startConversation();
   await logEvent('session_start', { conversation_id: conversationId });
 
   let systemPrompt = buildBaseSystemPrompt();
-  const history: ApiMessage[] = [];
+  const history: Message[] = [];
   let tier3Injected = false;
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   console.log(chalk.dim('\nNOVA online. Type your message, or Ctrl+C to exit.\n'));
 
@@ -154,7 +106,6 @@ export async function runSession(): Promise<void> {
   const handleShutdown = async (reason: string) => {
     rl.close();
     console.log(chalk.dim('\nexiting...'));
-
     try {
       const transcript = buildTranscript(history);
       if (transcript.trim()) {
@@ -172,7 +123,6 @@ export async function runSession(): Promise<void> {
     } catch (err) {
       console.error(chalk.red(`[nova] session end error: ${(err as Error).message}`));
     }
-
     process.exit(0);
   };
 
@@ -189,7 +139,6 @@ export async function runSession(): Promise<void> {
 
     if (!userInput.trim()) continue;
 
-    // Handle slash commands before sending to API
     if (isSlashCommand(userInput)) {
       await handleSlashCommand(userInput);
       continue;
@@ -199,7 +148,6 @@ export async function runSession(): Promise<void> {
     await appendMessage(conversationId, { role: 'user', content: userInput });
     await logEvent('message', { conversation_id: conversationId, role: 'user' });
 
-    // Inject Tier 3 into system prompt after first message (one-time, best-effort)
     if (!tier3Injected) {
       tier3Injected = true;
       try {
@@ -211,17 +159,12 @@ export async function runSession(): Promise<void> {
     }
 
     try {
-      const { text: assistantText, newMessages } = await runTurn(systemPrompt, history);
+      const { text, newMessages } = await runTurn(systemPrompt, history);
+      for (const msg of newMessages) history.push(msg);
 
-      // Splice all new messages (assistant + any tool turns) into history
-      for (const msg of newMessages) {
-        history.push(msg);
-      }
+      console.log('\n' + chalk.white(text) + '\n');
 
-      console.log('\n' + chalk.white(assistantText) + '\n');
-
-      // Persist only the final assistant text (tool results are transient context)
-      await appendMessage(conversationId, { role: 'assistant', content: assistantText });
+      await appendMessage(conversationId, { role: 'assistant', content: text });
       await logEvent('message', { conversation_id: conversationId, role: 'assistant' });
 
       if (userInput.length > 50) {

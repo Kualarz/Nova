@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { getModelRouter } from '../providers/router.js';
 import { getConfig } from '../lib/config.js';
 import { MemoryCategory } from './store.js';
 
@@ -28,23 +28,15 @@ Return [] if nothing worth extracting.
 Conversation:
 `;
 
-let _client: Anthropic | undefined;
-
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: getConfig().ANTHROPIC_API_KEY });
-  return _client;
-}
-
 export async function extractMemories(transcript: string): Promise<CandidateMemory[]> {
   if (!transcript.trim()) return [];
 
-  const response = await getClient().messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: EXTRACTION_PROMPT + transcript }],
-  });
+  const router = getModelRouter();
+  const response = await router.chat([
+    { role: 'user', content: EXTRACTION_PROMPT + transcript },
+  ]);
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  const text = response.content ?? '';
 
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return [];

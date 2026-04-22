@@ -15,7 +15,6 @@ import * as path from 'path';
 import { searchTier3 } from '../memory/tier3-semantic.js';
 import { findSimilar, supersedeMemory, insertMemory } from '../memory/store.js';
 import { getConfig } from '../lib/config.js';
-import { getDb } from '../db/client.js'; // used by cmdPromote
 import { newsTool } from './tools/news.js';
 
 export function isSlashCommand(input: string): boolean {
@@ -170,33 +169,16 @@ async function cmdPromote(idOrKeyword: string): Promise<void> {
     return;
   }
 
-  // Try to find memory by ID prefix, then fall back to semantic search
-  const db = getDb();
+  // Find memory via semantic search (use /recall first to identify the right memory)
   let memoryContent: string | undefined;
 
-  // ID prefix search (if looks like a UUID fragment)
-  if (/^[a-f0-9-]{6,}/i.test(idOrKeyword)) {
-    const { data } = await db
-      .from('memories')
-      .select('id, content')
-      .eq('user_id', config.NOVA_USER_ID)
-      .ilike('id', `${idOrKeyword}%`)
-      .is('superseded_by', null)
-      .limit(1)
-      .single();
-    if (data) memoryContent = (data as { content: string }).content;
-  }
-
-  // Fall back to semantic search
-  if (!memoryContent) {
-    const memories = await findSimilar({
-      userId: config.NOVA_USER_ID,
-      query: idOrKeyword,
-      limit: 1,
-      threshold: 0.7,
-    });
-    if (memories[0]) memoryContent = memories[0].content;
-  }
+  const memories = await findSimilar({
+    userId: config.NOVA_USER_ID,
+    query: idOrKeyword,
+    limit: 1,
+    threshold: 0.6,
+  });
+  if (memories[0]) memoryContent = memories[0].content;
 
   if (!memoryContent) {
     console.log(chalk.dim(`Could not find memory matching "${idOrKeyword}".\n`));

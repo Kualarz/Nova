@@ -19,6 +19,7 @@ export interface ToolDefinition {
   run(input: Record<string, unknown>): Promise<string>;
 }
 
+import type { Tool } from '../../providers/interface.js';
 import { webSearchTool } from './web-search.js';
 import { weatherTool } from './weather.js';
 import { newsTool } from './news.js';
@@ -36,12 +37,15 @@ export const ALL_TOOLS: ToolDefinition[] = [
   gmailSearchTool,
 ];
 
-/** Convert to the shape the Anthropic SDK expects for messages.create(). */
-export function toApiTools() {
+/** Convert to the OpenAI/Ollama tool format used by ModelRouter. */
+export function toApiTools(): Tool[] {
   return ALL_TOOLS.map(t => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema,
+    type: 'function' as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema as Record<string, unknown>,
+    },
   }));
 }
 

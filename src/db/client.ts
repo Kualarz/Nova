@@ -1,11 +1,25 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../lib/config.js';
+import type { DatabaseProvider } from './interface.js';
 
-let _client: SupabaseClient | undefined;
+let _provider: DatabaseProvider | undefined;
 
-export function getDb(): SupabaseClient {
-  if (_client) return _client;
+export async function getDb(): Promise<DatabaseProvider> {
+  if (_provider) return _provider;
+
   const config = getConfig();
-  _client = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
-  return _client;
+
+  if (config.DATABASE_TYPE === 'supabase') {
+    const { SupabaseProvider } = await import('./providers/supabase.js');
+    _provider = new SupabaseProvider();
+  } else {
+    const { LocalProvider } = await import('./providers/local.js');
+    _provider = new LocalProvider(config.PGLITE_PATH);
+    await _provider.runMigrations();
+  }
+
+  return _provider;
+}
+
+export function resetDb(): void {
+  _provider = undefined;
 }
