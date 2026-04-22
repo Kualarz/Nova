@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -158,6 +158,54 @@ export class LocalProvider implements DatabaseProvider {
       `INSERT INTO events (user_id, event_type, payload) VALUES ($1, $2, $3)`,
       [userId, type, JSON.stringify(payload)]
     );
+  }
+
+  async insertMemoryConnection(params: InsertMemoryConnectionParams): Promise<void> {
+    const db = await this.getDb();
+    const [a, b] = [params.memoryAId, params.memoryBId].sort();
+    await db.query(
+      `INSERT INTO memory_connections (memory_a_id, memory_b_id, similarity, type)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (memory_a_id, memory_b_id) DO UPDATE SET similarity = EXCLUDED.similarity`,
+      [a, b, params.similarity, params.type]
+    );
+  }
+
+  async findSimilarForEdges(params: FindSimilarForEdgesParams): Promise<FindSimilarForEdgesResult[]> {
+    const db = await this.getDb();
+    const embStr = embeddingToSql(params.embedding);
+    const result = await db.query<FindSimilarForEdgesResult>(
+      `SELECT id, 1 - (embedding <=> $1::vector) AS similarity
+       FROM memories
+       WHERE user_id = $2
+         AND id != $3
+         AND superseded_by IS NULL
+         AND 1 - (embedding <=> $1::vector) > $4
+       ORDER BY embedding <=> $1::vector
+       LIMIT $5`,
+      [embStr, params.userId, params.excludeId, params.threshold, params.limit]
+    );
+    return result.rows;
+  }
+
+  async findNeighborMemories(params: FindNeighborMemoriesParams): Promise<Memory[]> {
+    if (params.memoryIds.length === 0) return [];
+    const db = await this.getDb();
+    const phs = params.memoryIds.map((_, i) => `$${i + 2}`).join(', ');
+    const result = await db.query<Memory>(
+      `SELECT DISTINCT m.id, m.content, m.category, m.confidence, m.access_count, m.created_at
+       FROM memories m
+       WHERE m.user_id = $1
+         AND m.superseded_by IS NULL
+         AND m.id NOT IN (${phs})
+         AND EXISTS (
+           SELECT 1 FROM memory_connections mc
+           WHERE (mc.memory_a_id = m.id AND mc.memory_b_id IN (${phs}))
+              OR (mc.memory_b_id = m.id AND mc.memory_a_id IN (${phs}))
+         )`,
+      [params.userId, ...params.memoryIds]
+    );
+    return result.rows;
   }
 
   async close(): Promise<void> {

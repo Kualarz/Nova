@@ -1,5 +1,6 @@
 import { getDb } from '../db/client.js';
 import { getModelRouter } from '../providers/router.js';
+import { buildEdges } from './graph.js';
 
 export type MemoryCategory = 'fact' | 'preference' | 'observation' | 'personality';
 
@@ -26,7 +27,7 @@ export async function insertMemory(params: {
 }): Promise<string> {
   const db = await getDb();
   const embedding = await embed(params.content);
-  return db.insertMemory({
+  const id = await db.insertMemory({
     userId: params.userId,
     content: params.content,
     category: params.category,
@@ -34,6 +35,8 @@ export async function insertMemory(params: {
     confidence: params.confidence ?? 1.0,
     sourceConversationId: params.sourceConversationId,
   });
+  await buildEdges({ memoryId: id, userId: params.userId, embedding });
+  return id;
 }
 
 export async function supersedeMemory(oldId: string, newId: string): Promise<void> {

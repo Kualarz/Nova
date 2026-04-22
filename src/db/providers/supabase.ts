@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -114,6 +114,18 @@ export class SupabaseProvider implements DatabaseProvider {
       payload,
     });
     if (error) console.error(`[nova] logEvent failed (${type}): ${error.message}`);
+  }
+
+  async insertMemoryConnection(_params: InsertMemoryConnectionParams): Promise<void> {
+    throw new Error('insertMemoryConnection: not implemented for Supabase — run graph SQL manually');
+  }
+
+  async findSimilarForEdges(_params: FindSimilarForEdgesParams): Promise<FindSimilarForEdgesResult[]> {
+    throw new Error('findSimilarForEdges: not implemented for Supabase');
+  }
+
+  async findNeighborMemories(_params: FindNeighborMemoriesParams): Promise<Memory[]> {
+    throw new Error('findNeighborMemories: not implemented for Supabase');
   }
 
   async runMigrations(): Promise<void> {
