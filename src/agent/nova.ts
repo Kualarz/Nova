@@ -11,6 +11,7 @@ import { extractMemories } from '../memory/extract.js';
 import { reconcileMemories } from '../memory/reconcile.js';
 import { toApiTools, executeTool } from './tools/index.js';
 import { handleSlashCommand, isSlashCommand } from './slash-commands.js';
+import { fireHook } from '../automation/hooks.js';
 
 function buildTranscript(history: Message[]): string {
   return history
@@ -87,6 +88,31 @@ async function runTurn(
   return { text: '[Max tool iterations reached]', newMessages: added };
 }
 
+export async function runPrompt(userPrompt: string): Promise<string> {
+  const conversationId = await startConversation();
+  let systemPrompt = await buildBaseSystemPrompt();
+
+  try {
+    const tier3 = await buildTier3Injection(userPrompt);
+    if (tier3) systemPrompt = systemPrompt + '\n\n---\n\n' + tier3;
+  } catch {
+    // best-effort
+  }
+
+  const history: Message[] = [{ role: 'user', content: userPrompt }];
+  await appendMessage(conversationId, { role: 'user', content: userPrompt });
+
+  const { text, newMessages } = await runTurn(systemPrompt, history);
+
+  await appendMessage(conversationId, { role: 'assistant', content: text });
+  await endConversation(conversationId);
+
+  // Log tool messages but don't re-append them — runTurn already has them in newMessages
+  void newMessages;
+
+  return text;
+}
+
 export async function runSession(): Promise<void> {
   const config = getConfig();
   const conversationId = await startConversation();
@@ -99,6 +125,7 @@ export async function runSession(): Promise<void> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   console.log(chalk.dim('\nNOVA online. Type your message, or Ctrl+C to exit.\n'));
+  fireHook('session.start').catch(() => {});
 
   const prompt = (): Promise<string> =>
     new Promise(resolve => rl.question(chalk.dim('nova > '), resolve));
@@ -107,6 +134,7 @@ export async function runSession(): Promise<void> {
     rl.close();
     console.log(chalk.dim('\nexiting...'));
     try {
+      await fireHook('session.end').catch(() => {});
       const transcript = buildTranscript(history);
       if (transcript.trim()) {
         const candidates = await extractMemories(transcript);

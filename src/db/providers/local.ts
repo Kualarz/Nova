@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -206,6 +206,24 @@ export class LocalProvider implements DatabaseProvider {
       [params.userId, ...params.memoryIds]
     );
     return result.rows;
+  }
+
+  async getEnabledHooks(event: string): Promise<Hook[]> {
+    const db = await this.getDb();
+    const result = await db.query<Hook>(
+      `SELECT id, event, skill_name, enabled FROM hooks WHERE event = $1 AND enabled = 1`,
+      [event]
+    );
+    return result.rows;
+  }
+
+  async insertHook(params: InsertHookParams): Promise<string> {
+    const db = await this.getDb();
+    const result = await db.query<{ id: string }>(
+      `INSERT INTO hooks (event, skill_name) VALUES ($1, $2) RETURNING id`,
+      [params.event, params.skillName]
+    );
+    return result.rows[0]!.id;
   }
 
   async close(): Promise<void> {

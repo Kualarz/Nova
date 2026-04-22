@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -126,6 +126,14 @@ export class SupabaseProvider implements DatabaseProvider {
 
   async findNeighborMemories(_params: FindNeighborMemoriesParams): Promise<Memory[]> {
     throw new Error('findNeighborMemories: not implemented for Supabase');
+  }
+
+  async getEnabledHooks(_event: string): Promise<Hook[]> {
+    throw new Error('getEnabledHooks: not implemented for Supabase');
+  }
+
+  async insertHook(_params: InsertHookParams): Promise<string> {
+    throw new Error('insertHook: not implemented for Supabase');
   }
 
   async runMigrations(): Promise<void> {

@@ -25,6 +25,18 @@ export interface FindNeighborMemoriesParams {
   userId: string;
 }
 
+export interface Hook {
+  id: string;
+  event: string;
+  skill_name: string;
+  enabled: number;
+}
+
+export interface InsertHookParams {
+  event: string;
+  skillName: string;
+}
+
 export interface InsertMemoryParams {
   userId: string;
   content: string;
@@ -69,6 +81,10 @@ export interface DatabaseProvider {
   insertMemoryConnection(params: InsertMemoryConnectionParams): Promise<void>;
   findSimilarForEdges(params: FindSimilarForEdgesParams): Promise<FindSimilarForEdgesResult[]>;
   findNeighborMemories(params: FindNeighborMemoriesParams): Promise<Memory[]>;
+
+  // Hooks
+  getEnabledHooks(event: string): Promise<Hook[]>;
+  insertHook(params: InsertHookParams): Promise<string>;
 
   // Setup
   runMigrations(): Promise<void>;
