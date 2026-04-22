@@ -16,6 +16,11 @@ workspace/SOUL.md
 workspace/AGENTS.md
 workspace/news-feeds.yaml
 
+# Runtime database (PGlite — regenerated on first boot)
+workspace/*.db
+workspace/*.db-shm
+workspace/*.db-wal
+
 # Google OAuth token (written on first auth)
 .google-token.json
 
