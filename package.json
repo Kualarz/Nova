@@ -26,6 +26,7 @@
     "@supabase/supabase-js": "^2.103.3",
     "chalk": "^4.1.2",
     "dotenv": "^17.4.2",
+    "gray-matter": "^4.0.3",
     "openai": "^6.34.0",
     "rss-parser": "^3.13.0",
     "zod": "^4.3.6"
