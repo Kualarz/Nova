@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NOVA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <span class="dot"></span>NOVA
+    </div>
+
+    <div class="nav-item active" data-panel="chat">
+      <span class="icon">💬</span>Chat
+    </div>
+    <div class="nav-item" data-panel="status">
+      <span class="icon">📡</span>Status
+    </div>
+    <div class="nav-item" data-panel="memory">
+      <span class="icon">🧠</span>Memory
+    </div>
+    <div class="nav-item" data-panel="tasks">
+      <span class="icon">⚡</span>Tasks
+    </div>
+    <div class="nav-item" data-panel="workspace">
+      <span class="icon">📝</span>Workspace
+    </div>
+    <div class="nav-item" data-panel="settings">
+      <span class="icon">⚙</span>Settings
+    </div>
+
+    <div class="sidebar-version">NOVA · Phase 3</div>
+  </nav>
+
+  <!-- ── Content ──────────────────────────────────────────────────────────── -->
+  <div id="content">
+
+    <!-- ── CHAT PANEL ──────────────────────────────────────────────────────── -->
+    <div id="panel-chat" class="panel active">
+      <div id="chat-messages"></div>
+      <div id="chat-status">connecting…</div>
+      <form id="chat-form" onsubmit="return false">
+        <textarea
+          id="chat-input"
+          placeholder="Message NOVA… (Enter to send, Shift+Enter for newline)"
+          rows="1"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
+        <button id="send-btn" class="btn btn-primary" type="button" disabled>Send</button>
+        <button id="clear-chat-btn" class="btn" type="button" title="Clear chat &amp; reconnect">Clear</button>
+      </form>
+    </div>
+
+    <!-- ── STATUS PANEL ────────────────────────────────────────────────────── -->
+    <div id="panel-status" class="panel">
+      <div class="panel-header">
+        <h2>Status</h2>
+        <span style="color:var(--dimmer);font-size:11px">runtime stats</span>
+      </div>
+      <div class="status-body">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value" id="stat-uptime">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Sessions</div>
+            <div class="stat-value" id="stat-sessions">—</div>
+            <div class="stat-sub"  id="stat-days">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Memories (Tier 3)</div>
+            <div class="stat-value" id="stat-memories">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Last Session</div>
+            <div class="stat-value" id="stat-last" style="font-size:14px">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Provider / Model</div>
+            <div class="stat-value" id="stat-provider" style="font-size:13px">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Database</div>
+            <div class="stat-value" id="stat-db" style="font-size:16px">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MEMORY PANEL ────────────────────────────────────────────────────── -->
+    <div id="panel-memory" class="panel">
+      <div class="panel-header">
+        <h2>Memory</h2>
+        <button id="refresh-memories-btn" class="btn btn-sm" type="button">Refresh</button>
+      </div>
+      <div class="search-bar">
+        <input id="memory-search" type="search" placeholder="Search memories…" autocomplete="off">
+      </div>
+      <div id="memory-list" class="memory-list">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ── TASKS PANEL ─────────────────────────────────────────────────────── -->
+    <div id="panel-tasks" class="panel">
+      <div class="panel-header">
+        <h2>Tasks</h2>
+        <button id="refresh-tasks-btn" class="btn btn-sm" type="button">Refresh</button>
+      </div>
+      <div id="tasks-list" class="tasks-list">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ── WORKSPACE PANEL ────────────────────────────────────────────────── -->
+    <div id="panel-workspace" class="panel">
+      <div class="panel-header">
+        <h2>Workspace</h2>
+        <button id="new-skill-btn" class="btn btn-sm" type="button">+ New Skill</button>
+      </div>
+      <div class="workspace-layout">
+        <!-- File tree -->
+        <div id="file-tree" class="file-tree"></div>
+
+        <!-- Editor area -->
+        <div class="editor-area">
+          <!-- Shown when no file is selected -->
+          <div id="editor-placeholder" class="editor-placeholder">
+            Select a file from the tree to edit
+          </div>
+
+          <!-- Shown when a file is open (JS toggles display: flex) -->
+          <div id="editor-main">
+            <div class="editor-topbar">
+              <span id="editor-filename" class="editor-filename"></span>
+              <div class="editor-actions">
+                <button id="discard-btn" class="btn btn-sm" type="button">Discard</button>
+                <button id="save-btn"    class="btn btn-sm btn-primary" type="button">Save</button>
+              </div>
+            </div>
+            <textarea id="file-content" spellcheck="false"></textarea>
+            <div id="editor-status" class="editor-status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS PANEL ─────────────────────────────────────────────────── -->
+    <div id="panel-settings" class="panel">
+      <div class="panel-header">
+        <h2>Settings</h2>
+        <span style="color:var(--dimmer);font-size:11px">writes to .env · some changes need restart</span>
+      </div>
+      <div class="settings-body">
+
+        <!-- Model ---------------------------------------------------------- -->
+        <div class="settings-section">
+          <h3>Model</h3>
+          <div class="field-row">
+            <div class="field">
+              <label for="cfg-MODEL_PROVIDER">Provider</label>
+              <select id="cfg-MODEL_PROVIDER">
+                <option value="ollama">ollama</option>
+                <option value="openrouter">openrouter</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="cfg-DEFAULT_MODEL">Default Model</label>
+              <input id="cfg-DEFAULT_MODEL" type="text" placeholder="e.g. llama3.1">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="cfg-COMPLEX_MODEL">Complex Model</label>
+              <input id="cfg-COMPLEX_MODEL" type="text" placeholder="e.g. qwen2.5:72b">
+            </div>
+            <div class="field">
+              <label for="cfg-EMBED_MODEL">Embed Model</label>
+              <input id="cfg-EMBED_MODEL" type="text" placeholder="e.g. nomic-embed-text">
+            </div>
+          </div>
+          <div class="field">
+            <label for="cfg-OLLAMA_HOST">Ollama Host</label>
+            <input id="cfg-OLLAMA_HOST" type="text" placeholder="http://localhost:11434">
+          </div>
+          <div class="field">
+            <label for="cfg-OPENROUTER_API_KEY">OpenRouter API Key</label>
+            <div class="flex-row">
+              <input id="cfg-OPENROUTER_API_KEY" type="password" autocomplete="off">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENROUTER_API_KEY">show</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Database ------------------------------------------------------- -->
+        <div class="settings-section">
+          <h3>Database</h3>
+          <div class="field-row">
+            <div class="field">
+              <label for="cfg-DATABASE_TYPE">Type</label>
+              <select id="cfg-DATABASE_TYPE">
+                <option value="local">local (PGlite)</option>
+                <option value="supabase">supabase</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="cfg-PGLITE_PATH">PGlite Path</label>
+              <input id="cfg-PGLITE_PATH" type="text" placeholder="./data/db">
+            </div>
+          </div>
+          <div class="field">
+            <label for="cfg-SUPABASE_URL">Supabase URL</label>
+            <input id="cfg-SUPABASE_URL" type="text" placeholder="https://xxx.supabase.co">
+          </div>
+          <div class="field">
+            <label for="cfg-SUPABASE_SERVICE_ROLE_KEY">Supabase Service Role Key</label>
+            <div class="flex-row">
+              <input id="cfg-SUPABASE_SERVICE_ROLE_KEY" type="password" autocomplete="off">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-SUPABASE_SERVICE_ROLE_KEY">show</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Workspace ------------------------------------------------------ -->
+        <div class="settings-section">
+          <h3>Workspace</h3>
+          <div class="field">
+            <label for="cfg-NOVA_WORKSPACE_PATH">Workspace Path</label>
+            <input id="cfg-NOVA_WORKSPACE_PATH" type="text" placeholder="/path/to/workspace">
+          </div>
+          <div class="field">
+            <label for="cfg-GOOGLE_CREDENTIALS_PATH">Google Credentials Path</label>
+            <input id="cfg-GOOGLE_CREDENTIALS_PATH" type="text" placeholder="/path/to/credentials.json">
+          </div>
+        </div>
+
+        <!-- Integrations --------------------------------------------------- -->
+        <div class="settings-section">
+          <h3>Integrations</h3>
+          <div class="field">
+            <label for="cfg-NOTION_API_KEY">Notion API Key</label>
+            <div class="flex-row">
+              <input id="cfg-NOTION_API_KEY" type="password" autocomplete="off">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-NOTION_API_KEY">show</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="cfg-WEB_SEARCH_API_KEY">Web Search API Key</label>
+            <div class="flex-row">
+              <input id="cfg-WEB_SEARCH_API_KEY" type="password" autocomplete="off">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-WEB_SEARCH_API_KEY">show</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="cfg-OPENWEATHER_API_KEY">OpenWeather API Key</label>
+            <div class="flex-row">
+              <input id="cfg-OPENWEATHER_API_KEY" type="password" autocomplete="off">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENWEATHER_API_KEY">show</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Telegram ------------------------------------------------------- -->
+        <div class="settings-section">
+          <h3>Telegram</h3>
+          <div class="field-row">
+            <div class="field">
+              <label for="cfg-TELEGRAM_BOT_TOKEN">Bot Token</label>
+              <div class="flex-row">
+                <input id="cfg-TELEGRAM_BOT_TOKEN" type="password" autocomplete="off">
+                <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-TELEGRAM_BOT_TOKEN">show</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="cfg-TELEGRAM_CHAT_ID">Chat ID</label>
+              <input id="cfg-TELEGRAM_CHAT_ID" type="text" placeholder="Your Telegram chat ID">
+            </div>
+          </div>
+        </div>
+
+        <!-- Workflows ------------------------------------------------------ -->
+        <div class="settings-section">
+          <h3>Workflows</h3>
+          <div class="field">
+            <label for="cfg-NOVA_WORKFLOWS">Workflows</label>
+            <select id="cfg-NOVA_WORKFLOWS">
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+            <div class="hint">Enables morning briefing, digest, and dreaming consolidation.</div>
+          </div>
+        </div>
+
+      </div><!-- /.settings-body -->
+
+      <div class="settings-footer">
+        <button id="settings-save-btn" class="btn btn-primary" type="button">Save Settings</button>
+        <span id="settings-status"></span>
+        <span class="restart-note ml-auto">Some changes require a server restart.</span>
+      </div>
+    </div><!-- #panel-settings -->
+
+  </div><!-- #content -->
+</div><!-- #app -->
+
+<script src="app.js"></script>
+</body>
+</html>
