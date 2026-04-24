@@ -52,7 +52,7 @@ beforeEach(async () => {
   vi.mocked(getModelRouter).mockReturnValue({
     chat: vi.fn().mockResolvedValue({ stop_reason: 'stop', content: 'ok', tool_calls: [] }),
     embed: vi.fn().mockResolvedValue(new Array(768).fill(0)),
-  } as ReturnType<typeof getModelRouter>);
+  } as unknown as ReturnType<typeof getModelRouter>);
   vi.mocked(runPrompt).mockResolvedValue('ok');
   mockLoadAll.mockResolvedValue([
     { name: 'greet', body: 'Say hello to the user.', tools: [], enabled: true, reversible: true, description: '', filePath: '' },

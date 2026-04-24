@@ -50,6 +50,18 @@ export class OllamaProvider implements LLMProvider {
     this.config = config;
   }
 
+  private throwIfConnectionRefused(err: unknown, endpoint: string): never {
+    const msg = (err instanceof Error) ? err.message : String(err);
+    if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+      throw new Error(
+        `Ollama is not reachable at ${this.config.host}${endpoint}.\n` +
+        `Make sure Ollama is running: open the Ollama app or run 'ollama serve' in a terminal.\n` +
+        `Then verify the model is available: ollama pull ${this.config.defaultModel}`
+      );
+    }
+    throw err;
+  }
+
   async chat(messages: Message[], options: ChatOptions = {}): Promise<ChatResponse> {
     const model = options.model ?? this.config.defaultModel;
 
@@ -67,7 +79,7 @@ export class OllamaProvider implements LLMProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }).catch((err: unknown): never => this.throwIfConnectionRefused(err, '/api/chat'));
 
     if (!resp.ok) {
       throw new Error(`Ollama chat error ${resp.status}: ${resp.statusText}`);
@@ -91,7 +103,7 @@ export class OllamaProvider implements LLMProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages, stream: true }),
-    });
+    }).catch((err: unknown): never => this.throwIfConnectionRefused(err, '/api/chat'));
 
     if (!resp.ok || !resp.body) {
       throw new Error(`Ollama stream error ${resp.status}: ${resp.statusText}`);
@@ -123,7 +135,7 @@ export class OllamaProvider implements LLMProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, prompt: text }),
-    });
+    }).catch((err: unknown): never => this.throwIfConnectionRefused(err, '/api/embeddings'));
 
     if (!resp.ok) {
       throw new Error(`Ollama embed error ${resp.status}: ${resp.statusText}`);

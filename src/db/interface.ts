@@ -1,5 +1,39 @@
 import type { MemoryCategory, Memory } from '../memory/store.js';
 
+export interface SessionStats {
+  sessionCount: number;
+  lastSession: string | null;  // ISO string or null if no sessions yet
+  daysActive: number;
+  memoryCount: number;         // active (non-superseded) Tier 3 memories
+}
+
+export type TaskStatus = 'running' | 'done' | 'error';
+
+export interface Task {
+  id: string;
+  user_id: string;
+  description: string;
+  project_dir: string;
+  status: TaskStatus;
+  result: string | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface InsertTaskParams {
+  userId: string;
+  description: string;
+  projectDir: string;
+}
+
+export interface UpdateTaskParams {
+  id: string;
+  status: 'done' | 'error';
+  result?: string;
+  error?: string;
+}
+
 export interface InsertMemoryConnectionParams {
   memoryAId: string;
   memoryBId: string;
@@ -65,6 +99,7 @@ export interface DatabaseProvider {
   // Memories
   insertMemory(params: InsertMemoryParams): Promise<string>;
   matchMemories(params: MatchMemoriesParams): Promise<Memory[]>;
+  listMemories(userId: string, limit: number): Promise<Memory[]>;
   supersedeMemory(oldId: string, newId: string): Promise<void>;
   incrementMemoryAccess(memoryIds: string[], accessedAt: string): Promise<void>;
 
@@ -85,6 +120,15 @@ export interface DatabaseProvider {
   // Hooks
   getEnabledHooks(event: string): Promise<Hook[]>;
   insertHook(params: InsertHookParams): Promise<string>;
+
+  // Tasks
+  insertTask(params: InsertTaskParams): Promise<string>;
+  updateTask(params: UpdateTaskParams): Promise<void>;
+  listTasks(userId: string, limit: number): Promise<Task[]>;
+  getTaskCount(userId: string): Promise<number>;
+
+  // Stats
+  getSessionStats(userId: string): Promise<SessionStats>;
 
   // Setup
   runMigrations(): Promise<void>;

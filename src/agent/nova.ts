@@ -12,6 +12,10 @@ import { reconcileMemories } from '../memory/reconcile.js';
 import { toApiTools, executeTool } from './tools/index.js';
 import { handleSlashCommand, isSlashCommand } from './slash-commands.js';
 import { fireHook } from '../automation/hooks.js';
+import { shouldFlush, flushMemories } from '../memory/flush.js';
+
+// Module-level notices queue: slash-commands push here; REPL drains before each prompt.
+let _sessionTaskNotices: string[] | null = null;
 
 function buildTranscript(history: Message[]): string {
   return history
@@ -88,6 +92,19 @@ async function runTurn(
   return { text: '[Max tool iterations reached]', newMessages: added };
 }
 
+/**
+ * Used by the web UI WebSocket handler.
+ * Caller owns the history and conversationId; this just runs one turn.
+ */
+export async function runWebTurn(
+  systemPrompt: string,
+  history: Message[],
+  userPrompt: string
+): Promise<{ text: string; newMessages: Message[] }> {
+  const userMsg: Message = { role: 'user', content: userPrompt };
+  return runTurn(systemPrompt, [...history, userMsg]);
+}
+
 export async function runPrompt(userPrompt: string): Promise<string> {
   const conversationId = await startConversation();
   let systemPrompt = await buildBaseSystemPrompt();
@@ -121,6 +138,10 @@ export async function runSession(): Promise<void> {
   let systemPrompt = await buildBaseSystemPrompt();
   const history: Message[] = [];
   let tier3Injected = false;
+  let turnCount = 0;
+
+  // Task completion notifications — module-level so slash-commands can push to it
+  _sessionTaskNotices = [];
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -157,6 +178,11 @@ export async function runSession(): Promise<void> {
   process.on('SIGINT', () => { void handleShutdown('sigint'); });
 
   for (;;) {
+    // Print any queued task-completion notices before the prompt
+    while (_sessionTaskNotices && _sessionTaskNotices.length > 0) {
+      console.log(chalk.dim(_sessionTaskNotices.shift()));
+    }
+
     let userInput: string;
     try {
       userInput = await prompt();
@@ -198,8 +224,23 @@ export async function runSession(): Promise<void> {
       if (userInput.length > 50) {
         await appendToDailyNote(userInput.slice(0, 200));
       }
+
+      // Periodic memory flush every FLUSH_EVERY turns
+      turnCount++;
+      if (shouldFlush(turnCount)) {
+        void flushMemories(buildTranscript(history), conversationId);
+      }
     } catch (err) {
       console.error(chalk.red(`\n[nova] error: ${(err as Error).message}\n`));
     }
   }
+}
+
+/**
+ * Returns the pending-task-notices array for the current session.
+ * Slash-commands push to this; the REPL drains it before each prompt.
+ * Returns null when called outside a runSession() context.
+ */
+export function getSessionTaskNotices(): string[] | null {
+  return _sessionTaskNotices;
 }

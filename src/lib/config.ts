@@ -32,6 +32,13 @@ const ConfigSchema = z.object({
   NOTION_API_KEY: z.string().default(''),
   WEB_SEARCH_API_KEY: z.string().default(''),
   OPENWEATHER_API_KEY: z.string().default(''),
+
+  // Phase 3 — Telegram channel
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  TELEGRAM_CHAT_ID: z.string().default(''),
+
+  // Phase 3 — server options
+  NOVA_WORKFLOWS: z.enum(['on', 'off']).default('on'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

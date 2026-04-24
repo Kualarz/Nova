@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -77,6 +77,19 @@ export class LocalProvider implements DatabaseProvider {
       [embStr, userId, threshold, limit]
     );
 
+    return result.rows;
+  }
+
+  async listMemories(userId: string, limit: number): Promise<Memory[]> {
+    const db = await this.getDb();
+    const result = await db.query<Memory>(
+      `SELECT id, content, category, confidence, access_count, created_at
+       FROM memories
+       WHERE user_id = $1 AND superseded_by IS NULL
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
     return result.rows;
   }
 
@@ -206,6 +219,72 @@ export class LocalProvider implements DatabaseProvider {
       [params.userId, ...params.memoryIds]
     );
     return result.rows;
+  }
+
+  async insertTask(params: InsertTaskParams): Promise<string> {
+    const db = await this.getDb();
+    const result = await db.query<{ id: string }>(
+      `INSERT INTO tasks (user_id, description, project_dir) VALUES ($1, $2, $3) RETURNING id`,
+      [params.userId, params.description, params.projectDir]
+    );
+    return result.rows[0]!.id;
+  }
+
+  async updateTask(params: UpdateTaskParams): Promise<void> {
+    const db = await this.getDb();
+    await db.query(
+      `UPDATE tasks SET status = $2, result = $3, error = $4, completed_at = now()::text WHERE id = $1`,
+      [params.id, params.status, params.result ?? null, params.error ?? null]
+    );
+  }
+
+  async listTasks(userId: string, limit: number): Promise<Task[]> {
+    const db = await this.getDb();
+    const result = await db.query<Task>(
+      `SELECT id, user_id, description, project_dir, status, result, error, created_at, completed_at
+       FROM tasks WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows;
+  }
+
+  async getTaskCount(userId: string): Promise<number> {
+    const db = await this.getDb();
+    const result = await db.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM tasks WHERE user_id = $1`,
+      [userId]
+    );
+    return parseInt(result.rows[0]?.count ?? '0', 10);
+  }
+
+  async getSessionStats(userId: string): Promise<SessionStats> {
+    const db = await this.getDb();
+
+    const convResult = await db.query<{ session_count: string; last_session: string | null; days_active: string }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE ended_at IS NOT NULL)            AS session_count,
+         MAX(ended_at)                                           AS last_session,
+         COUNT(DISTINCT SUBSTR(started_at, 1, 10))              AS days_active
+       FROM conversations
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    const memResult = await db.query<{ memory_count: string }>(
+      `SELECT COUNT(*) AS memory_count
+       FROM memories
+       WHERE user_id = $1 AND superseded_by IS NULL`,
+      [userId]
+    );
+
+    const row = convResult.rows[0];
+    const memRow = memResult.rows[0];
+    return {
+      sessionCount: parseInt(row?.session_count ?? '0', 10),
+      lastSession: row?.last_session ?? null,
+      daysActive: parseInt(row?.days_active ?? '0', 10),
+      memoryCount: parseInt(memRow?.memory_count ?? '0', 10),
+    };
   }
 
   async getEnabledHooks(event: string): Promise<Hook[]> {

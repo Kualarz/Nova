@@ -47,7 +47,7 @@ beforeEach(() => {
   vi.mocked(getModelRouter).mockReturnValue({
     chat: vi.fn().mockResolvedValue({ stop_reason: 'stop', content: 'hello back', tool_calls: [] }),
     embed: vi.fn().mockResolvedValue(new Array(768).fill(0)),
-  } as ReturnType<typeof getModelRouter>);
+  } as unknown as ReturnType<typeof getModelRouter>);
 });
 
 describe('runPrompt', () => {

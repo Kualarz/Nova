@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -41,6 +41,18 @@ export class SupabaseProvider implements DatabaseProvider {
       match_count: params.limit,
     });
     if (error) throw new Error(`matchMemories failed: ${error.message}`);
+    return (data ?? []) as Memory[];
+  }
+
+  async listMemories(userId: string, limit: number): Promise<Memory[]> {
+    const { data, error } = await this.client
+      .from('memories')
+      .select('id, content, category, confidence, access_count, created_at')
+      .eq('user_id', userId)
+      .is('superseded_by', null)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`listMemories failed: ${error.message}`);
     return (data ?? []) as Memory[];
   }
 
@@ -126,6 +138,76 @@ export class SupabaseProvider implements DatabaseProvider {
 
   async findNeighborMemories(_params: FindNeighborMemoriesParams): Promise<Memory[]> {
     throw new Error('findNeighborMemories: not implemented for Supabase');
+  }
+
+  async insertTask(params: InsertTaskParams): Promise<string> {
+    const { data, error } = await this.client
+      .from('tasks')
+      .insert({ user_id: params.userId, description: params.description, project_dir: params.projectDir })
+      .select('id')
+      .single();
+    if (error) throw new Error(`insertTask failed: ${error.message}`);
+    return data.id as string;
+  }
+
+  async updateTask(params: UpdateTaskParams): Promise<void> {
+    const { error } = await this.client
+      .from('tasks')
+      .update({
+        status: params.status,
+        result: params.result ?? null,
+        error: params.error ?? null,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', params.id);
+    if (error) throw new Error(`updateTask failed: ${error.message}`);
+  }
+
+  async listTasks(userId: string, limit: number): Promise<Task[]> {
+    const { data, error } = await this.client
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`listTasks failed: ${error.message}`);
+    return (data ?? []) as Task[];
+  }
+
+  async getTaskCount(userId: string): Promise<number> {
+    const { count, error } = await this.client
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    if (error) throw new Error(`getTaskCount failed: ${error.message}`);
+    return count ?? 0;
+  }
+
+  async getSessionStats(userId: string): Promise<SessionStats> {
+    const { data: convData, error: convError } = await this.client
+      .from('conversations')
+      .select('ended_at, started_at')
+      .eq('user_id', userId);
+
+    if (convError) throw new Error(`getSessionStats failed: ${convError.message}`);
+
+    const rows = convData ?? [];
+    const completed = rows.filter(r => r.ended_at != null);
+    const sessionCount = completed.length;
+    const lastSession = completed.length > 0
+      ? completed.reduce((max, r) => (r.ended_at! > max ? r.ended_at! : max), '')
+      : null;
+    const daysActive = new Set(rows.map(r => (r.started_at as string).slice(0, 10))).size;
+
+    const { count, error: memError } = await this.client
+      .from('memories')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .is('superseded_by', null);
+
+    if (memError) throw new Error(`getSessionStats memory count failed: ${memError.message}`);
+
+    return { sessionCount, lastSession, daysActive, memoryCount: count ?? 0 };
   }
 
   async getEnabledHooks(_event: string): Promise<Hook[]> {

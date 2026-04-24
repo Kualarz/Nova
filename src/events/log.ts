@@ -7,7 +7,15 @@ export type EventType =
   | 'message'
   | 'tool_call'
   | 'memory_extracted'
-  | 'error';
+  | 'error'
+  // Phase 3 — server events
+  | 'server_start'
+  | 'server_stop'
+  | 'heartbeat_sent'
+  | 'heartbeat_noreply'
+  | 'dreaming_complete'
+  | 'morning_briefing_sent'
+  | 'evening_digest_sent';
 
 export async function logEvent(type: EventType, payload: Record<string, unknown> = {}): Promise<void> {
   const config = getConfig();
