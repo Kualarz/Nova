@@ -32,7 +32,8 @@ import type { Message } from '../providers/interface.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
-const PUBLIC_DIR = path.join(__dirname, 'public');
+// Static assets are not compiled — resolve from project root at runtime
+const PUBLIC_DIR = path.resolve(process.cwd(), 'src', 'server', 'public');
 
 // ── Secrets that are masked in GET /api/settings ──────────────────────────────
 const SECRET_KEYS = new Set([
