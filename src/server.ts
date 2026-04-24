@@ -6,7 +6,7 @@
  *  - Heartbeat scheduler (every 30 min during active hours)
  *  - Dreaming scheduler (nightly at 3am Melbourne)
  *  - Workflow schedulers (morning briefing + evening digest)
- *  - HTTP dashboard (port 3000)
+ *  - Web UI — Express + WebSocket (port 3000)
  *
  * Run: npm run server
  */
@@ -16,7 +16,7 @@ import { getTelegramChannel } from './channels/telegram.js';
 import { startHeartbeat, stopHeartbeat } from './heartbeat/scheduler.js';
 import { startDreaming, stopDreaming } from './dreaming/scheduler.js';
 import { startWorkflows, stopWorkflows } from './workflows/scheduler.js';
-import { startDashboard, stopDashboard } from './server/dashboard.js';
+import { startWebServer, stopWebServer } from './server/web.js';
 import { runPrompt } from './agent/nova.js';
 import { logEvent } from './events/log.js';
 
@@ -59,9 +59,9 @@ async function main(): Promise<void> {
   startDreaming();
   startWorkflows(send);
 
-  // --- Dashboard ---
+  // --- Web UI ---
   const dashPort = parseInt(process.env.PORT ?? '3000', 10);
-  startDashboard(dashPort);
+  startWebServer(dashPort);
 
   await logEvent('server_start', { provider: config.MODEL_PROVIDER });
   console.log('\nnova server online. Ctrl+C to stop.\n');
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
       stopHeartbeat();
       stopDreaming();
       stopWorkflows();
-      stopDashboard();
+      stopWebServer();
       await stopTelegram();
       await logEvent('server_stop', { reason });
     } catch {

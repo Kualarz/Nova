@@ -188,10 +188,10 @@ export function startWebServer(port = 3000): void {
     }
   });
 
-  app.get('/api/workspace/*', (req, res) => {
+  app.get('/api/workspace/{*path}', (req, res) => {
     try {
       const config = getConfig();
-      const filePath = (req.params as unknown as Record<string, string>)['0'] ?? '';
+      const filePath = (req.params as unknown as Record<string, string>).path ?? '';
       const abs = safeWorkspacePath(config.NOVA_WORKSPACE_PATH, filePath);
       if (!abs) return res.status(400).json({ error: 'Invalid path' });
       if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Not found' });
@@ -201,10 +201,10 @@ export function startWebServer(port = 3000): void {
     }
   });
 
-  app.put('/api/workspace/*', (req, res) => {
+  app.put('/api/workspace/{*path}', (req, res) => {
     try {
       const config = getConfig();
-      const filePath = (req.params as unknown as Record<string, string>)['0'] ?? '';
+      const filePath = (req.params as unknown as Record<string, string>).path ?? '';
       const abs = safeWorkspacePath(config.NOVA_WORKSPACE_PATH, filePath);
       if (!abs) return res.status(400).json({ error: 'Invalid path' });
       const content = (req.body as { content?: string }).content ?? '';
@@ -252,7 +252,7 @@ export function startWebServer(port = 3000): void {
   });
 
   // SPA fallback — serve index.html for any non-API route
-  app.get('*', (_req, res) => {
+  app.get('/{*path}', (_req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   });
 
