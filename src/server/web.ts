@@ -42,6 +42,7 @@ const SECRET_KEYS = new Set([
   'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
   'OPENROUTER_API_KEY',
+  'GROQ_API_KEY',
   'TELEGRAM_BOT_TOKEN',
   'NOTION_API_KEY',
   'WEB_SEARCH_API_KEY',
@@ -51,7 +52,7 @@ const SECRET_KEYS = new Set([
 // Keys the settings form is allowed to overwrite
 const WRITABLE_KEYS = new Set([
   'MODEL_PROVIDER', 'DEFAULT_MODEL', 'COMPLEX_MODEL', 'EMBED_MODEL',
-  'OLLAMA_HOST', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY',
+  'OLLAMA_HOST', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'GROQ_API_KEY',
   'DATABASE_TYPE', 'PGLITE_PATH',
   'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'NOVA_WORKSPACE_PATH',
@@ -221,7 +222,19 @@ export function startWebServer(port = 3000): void {
     try {
       const config = getConfig();
       const qp = req.query.provider as string | undefined;
-      const provider = (qp === 'openrouter' || qp === 'ollama' || qp === 'anthropic') ? qp : config.MODEL_PROVIDER;
+      const provider = (qp === 'openrouter' || qp === 'ollama' || qp === 'anthropic' || qp === 'groq') ? qp : config.MODEL_PROVIDER;
+
+      if (provider === 'groq') {
+        const resp = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { Authorization: `Bearer ${config.GROQ_API_KEY}` },
+        });
+        if (!resp.ok) return res.status(502).json({ error: `Groq unreachable: ${resp.status}` });
+        const data = (await resp.json()) as { data: Array<{ id: string; owned_by?: string }> };
+        const models = (data.data ?? [])
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map(m => ({ name: m.id, label: m.id, size: 0 }));
+        return res.json({ models, current: config.DEFAULT_MODEL, provider: 'groq' });
+      }
 
       if (provider === 'anthropic') {
         const models = [
@@ -438,6 +451,8 @@ export function startWebServer(port = 3000): void {
               friendly = `Invalid Anthropic API key. Check ANTHROPIC_API_KEY in Settings.`;
             } else if (cfg.MODEL_PROVIDER === 'openrouter') {
               friendly = `Invalid OpenRouter API key. Check OPENROUTER_API_KEY in Settings.`;
+            } else if (cfg.MODEL_PROVIDER === 'groq') {
+              friendly = `Invalid Groq API key. Check GROQ_API_KEY in Settings.`;
             }
           } else if (raw.includes('ECONNREFUSED') || raw.includes('fetch failed')) {
             if (cfg.MODEL_PROVIDER === 'anthropic') {

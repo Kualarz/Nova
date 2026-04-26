@@ -2,6 +2,7 @@ import { getConfig } from '../lib/config.js';
 import { OllamaProvider } from './ollama.js';
 import { OpenRouterProvider } from './openrouter.js';
 import { AnthropicProvider } from './anthropic.js';
+import { GroqProvider } from './groq.js';
 import type { LLMProvider, Message, ChatOptions, ChatResponse } from './interface.js';
 
 export class ModelRouter {
@@ -21,7 +22,13 @@ export class ModelRouter {
 
     this.embedProvider = ollamaProvider;
 
-    if (this.config.MODEL_PROVIDER === 'anthropic') {
+    if (this.config.MODEL_PROVIDER === 'groq') {
+      this.chatProvider = new GroqProvider({
+        apiKey: this.config.GROQ_API_KEY,
+        defaultModel: this.config.DEFAULT_MODEL,
+      });
+      this.name = 'groq';
+    } else if (this.config.MODEL_PROVIDER === 'anthropic') {
       this.chatProvider = new AnthropicProvider({
         apiKey: this.config.ANTHROPIC_API_KEY,
         defaultModel: this.config.DEFAULT_MODEL,

@@ -400,6 +400,7 @@
           <select id="cfg-MODEL_PROVIDER">
             <option value="ollama">Ollama (local, free)</option>
             <option value="openrouter">OpenRouter (free models)</option>
+            <option value="groq">Groq (fast, free tier)</option>
             <option value="anthropic">Anthropic Claude (paid)</option>
           </select>
           <div class="hint" id="provider-hint"></div>
@@ -450,6 +451,18 @@
               <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-ANTHROPIC_API_KEY">show</button>
             </div>
             <div class="hint">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com</a> · paid usage</div>
+          </div>
+        </div>
+
+        <!-- Groq-specific section -->
+        <div class="provider-section" data-provider="groq">
+          <div class="field">
+            <label for="cfg-GROQ_API_KEY">Groq API Key</label>
+            <div class="flex-row">
+              <input id="cfg-GROQ_API_KEY" type="password" autocomplete="off" placeholder="gsk_…">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-GROQ_API_KEY">show</button>
+            </div>
+            <div class="hint">Free tier with very fast inference. Get a key at <a href="https://console.groq.com/keys" target="_blank" style="color:var(--accent)">console.groq.com/keys</a></div>
           </div>
         </div>
 

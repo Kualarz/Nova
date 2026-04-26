@@ -12,12 +12,13 @@ const ConfigSchema = z.object({
   NOVA_WORKSPACE_PATH: z.string().min(1, 'NOVA_WORKSPACE_PATH is required'),
 
   // AI providers — Ollama is default (free, local)
-  MODEL_PROVIDER: z.enum(['ollama', 'openrouter', 'anthropic']).default('ollama'),
+  MODEL_PROVIDER: z.enum(['ollama', 'openrouter', 'anthropic', 'groq']).default('ollama'),
   DEFAULT_MODEL: z.string().default('gemma3:4b'),
   COMPLEX_MODEL: z.string().default(''),
   EMBED_MODEL: z.string().default('nomic-embed-text'),
   OLLAMA_HOST: z.string().default('http://localhost:11434'),
   OPENROUTER_API_KEY: z.string().default(''),
+  GROQ_API_KEY: z.string().default(''),
 
   // Database — local PGlite is default (zero setup)
   DATABASE_TYPE: z.enum(['local', 'supabase']).default('local'),

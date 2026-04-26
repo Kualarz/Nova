@@ -1132,6 +1132,7 @@ async function loadSettings() {
     setField('OLLAMA_HOST',              cfg.OLLAMA_HOST);
     setField('OPENROUTER_API_KEY',       cfg.OPENROUTER_API_KEY);
     setField('ANTHROPIC_API_KEY',        cfg.ANTHROPIC_API_KEY);
+    setField('GROQ_API_KEY',             cfg.GROQ_API_KEY);
     setField('DATABASE_TYPE',            cfg.DATABASE_TYPE);
     setField('PGLITE_PATH',              cfg.PGLITE_PATH);
     setField('SUPABASE_URL',             cfg.SUPABASE_URL);
@@ -1171,6 +1172,7 @@ function showProviderSection(provider) {
     const hints = {
       ollama:     'Free, runs locally. Requires Ollama installed.',
       openrouter: 'Free models available with daily limits. No card needed.',
+      groq:       'Very fast inference (~500 tok/s). Generous free tier, no card needed.',
       anthropic:  'Best quality. Requires paid Anthropic API credits.',
     };
     hint.textContent = hints[provider] || '';
@@ -1224,7 +1226,7 @@ function setSettingsStatus(msg, cls) {
 document.getElementById('settings-save-btn').addEventListener('click', async () => {
   const fields = [
     'MODEL_PROVIDER','DEFAULT_MODEL','COMPLEX_MODEL','EMBED_MODEL','OLLAMA_HOST',
-    'OPENROUTER_API_KEY','ANTHROPIC_API_KEY','DATABASE_TYPE','PGLITE_PATH','SUPABASE_URL',
+    'OPENROUTER_API_KEY','ANTHROPIC_API_KEY','GROQ_API_KEY','DATABASE_TYPE','PGLITE_PATH','SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY','NOVA_WORKSPACE_PATH','GOOGLE_CREDENTIALS_PATH',
     'NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY',
     'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','NOVA_WORKFLOWS',
