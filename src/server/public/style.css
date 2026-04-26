@@ -429,6 +429,60 @@ html, body {
 .toolbar-send-btn:hover:not(:disabled) { background: #fff; }
 .toolbar-send-btn:disabled { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.3); cursor: not-allowed; }
 
+/* ── Context window ring ─────────────────────────────────────────────────────── */
+.context-ring-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer;
+  color: var(--dim); padding: 4px 6px; border-radius: 6px;
+  font-size: 11px; font-family: var(--font-sans);
+  transition: background var(--transition), color var(--transition);
+}
+.context-ring-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+
+.context-ring-svg { display: block; transform: rotate(-90deg); flex-shrink: 0; }
+.context-ring-bg   { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 2.5; }
+.context-ring-fill {
+  fill: none; stroke: var(--text); stroke-width: 2.5;
+  stroke-dasharray: 62.83; stroke-dashoffset: 62.83;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease, stroke 0.4s ease;
+}
+.context-ring-fill.warn  { stroke: var(--amber); }
+.context-ring-fill.crit  { stroke: var(--red); }
+
+.context-pct { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 22px; }
+
+/* Context popover */
+.context-popover {
+  position: absolute; bottom: calc(100% + 10px); right: 0;
+  background: #1a1a1a; border: 1px solid var(--border2);
+  border-radius: 10px; padding: 14px 16px; width: 240px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 200;
+}
+.context-popover.hidden { display: none; }
+
+.context-pop-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.context-pop-label { font-size: 12px; color: var(--dim); }
+.context-pop-val   { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.context-pop-bar-wrap {
+  height: 4px; background: rgba(255,255,255,0.08);
+  border-radius: 2px; overflow: hidden; margin-bottom: 10px;
+}
+.context-pop-bar {
+  height: 100%; background: var(--text);
+  border-radius: 2px;
+  transition: width 0.6s ease, background 0.4s ease;
+}
+.context-pop-bar.warn { background: var(--amber); }
+.context-pop-bar.crit { background: var(--red); }
+
+.context-pop-hint { font-size: 11px; color: var(--dimmer); }
+
 /* Keyboard hint */
 #chat-hint {
   font-size: 11px;

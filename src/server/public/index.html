@@ -110,8 +110,29 @@
               </div>
             </div>
 
-            <!-- Right side: model selector + send -->
+            <!-- Right side: context ring + model selector + send -->
             <div class="toolbar-right">
+              <!-- Context window indicator -->
+              <div class="toolbar-popover-wrap" id="context-wrap">
+                <button class="context-ring-btn" id="context-btn" title="Context usage">
+                  <svg class="context-ring-svg" viewBox="0 0 28 28" width="22" height="22">
+                    <circle class="context-ring-bg" cx="14" cy="14" r="10"/>
+                    <circle class="context-ring-fill" id="context-ring-fill" cx="14" cy="14" r="10"/>
+                  </svg>
+                  <span class="context-pct" id="context-pct">—</span>
+                </button>
+                <div class="context-popover hidden" id="context-popover">
+                  <div class="context-pop-row">
+                    <span class="context-pop-label">Context window</span>
+                    <span class="context-pop-val" id="context-pop-val">— / —</span>
+                  </div>
+                  <div class="context-pop-bar-wrap">
+                    <div class="context-pop-bar" id="context-pop-bar" style="width:0%"></div>
+                  </div>
+                  <div class="context-pop-hint" id="context-pop-hint">Send a message to start</div>
+                </div>
+              </div>
+
               <div class="toolbar-popover-wrap" id="model-wrap">
                 <button id="model-btn" class="toolbar-model-btn" title="Select model">
                   <span id="model-btn-label">···</span>

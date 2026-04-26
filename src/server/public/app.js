@@ -195,6 +195,8 @@ function connectWS() {
       appendChatMsg('error', msg.message);
     } else if (msg.type === 'model_set') {
       updateModelLabel(msg.model);
+    } else if (msg.type === 'context_update') {
+      updateContextRing(msg.tokens, msg.limit);
     }
   };
 
@@ -411,8 +413,45 @@ function closeModelMenu() { modelMenuOpen = false; modelMenu.style.display = 'no
 
 document.getElementById('model-btn').addEventListener('click', toggleModelMenu);
 
+// ── Context window ring ───────────────────────────────────────────────────────
+const CIRCUMFERENCE = 62.83; // 2π × r=10
+let contextOpen = false;
+
+function closeContextPopover() {
+  contextOpen = false;
+  document.getElementById('context-popover').classList.add('hidden');
+}
+
+document.getElementById('context-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  contextOpen = !contextOpen;
+  document.getElementById('context-popover').classList.toggle('hidden', !contextOpen);
+  if (contextOpen) { closePlusMenu(); closeModelMenu(); }
+});
+
+function updateContextRing(tokens, limit) {
+  const pct  = Math.min(tokens / limit, 1);
+  const offset = CIRCUMFERENCE * (1 - pct);
+  const fill = document.getElementById('context-ring-fill');
+  const bar  = document.getElementById('context-pop-bar');
+
+  fill.style.strokeDashoffset = offset.toFixed(2);
+  bar.style.width = (pct * 100).toFixed(1) + '%';
+
+  const cls = pct >= 0.9 ? 'crit' : pct >= 0.7 ? 'warn' : '';
+  fill.className = 'context-ring-fill' + (cls ? ' ' + cls : '');
+  bar.className  = 'context-pop-bar'   + (cls ? ' ' + cls : '');
+
+  const pctLabel = (pct * 100).toFixed(0) + '%';
+  document.getElementById('context-pct').textContent = pctLabel;
+
+  const kFmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n;
+  document.getElementById('context-pop-val').textContent  = `${kFmt(tokens)} / ${kFmt(limit)}`;
+  document.getElementById('context-pop-hint').textContent = `${pctLabel} of context used`;
+}
+
 // Close menus when clicking outside
-document.addEventListener('click', () => { closePlusMenu(); closeModelMenu(); });
+document.addEventListener('click', () => { closePlusMenu(); closeModelMenu(); closeContextPopover(); });
 
 let modelProvider = 'ollama';
 

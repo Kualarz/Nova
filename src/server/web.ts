@@ -376,15 +376,29 @@ export function startWebServer(port = 3000): void {
           await appendMessage(session.conversationId, { role: 'assistant', content: reply });
 
           ws.send(JSON.stringify({ type: 'response', text: reply }));
+
+          // Send approximate context usage (chars ÷ 4 ≈ tokens)
+          const totalChars = session.history.reduce((s, m) => s + (m.content?.length ?? 0), 0);
+          const approxTokens = Math.round(totalChars / 4);
+          ws.send(JSON.stringify({ type: 'context_update', tokens: approxTokens, limit: 128000 }));
+
         } catch (err) {
           const raw = (err as Error).message ?? '';
           let friendly = raw;
           if (raw.includes('404')) {
             const cfg = getConfig();
-            friendly = `Model not found in Ollama (404). Run: ollama pull ${cfg.DEFAULT_MODEL}\n\nThen restart the server.`;
+            if (cfg.MODEL_PROVIDER === 'openrouter') {
+              friendly = `Model not found on OpenRouter: "${cfg.DEFAULT_MODEL}". Select a different model in Settings.`;
+            } else {
+              friendly = `Model not found in Ollama (404). Run: ollama pull ${cfg.DEFAULT_MODEL}\n\nThen restart the server.`;
+            }
           } else if (raw.includes('ECONNREFUSED') || raw.includes('fetch failed')) {
             const cfg = getConfig();
-            friendly = `Cannot reach Ollama at ${cfg.OLLAMA_HOST}. Make sure Ollama is running.`;
+            if (cfg.MODEL_PROVIDER === 'openrouter') {
+              friendly = `Cannot reach OpenRouter. Check your internet connection or API key in Settings.`;
+            } else {
+              friendly = `Cannot reach Ollama at ${cfg.OLLAMA_HOST}. Make sure Ollama is running.`;
+            }
           }
           ws.send(JSON.stringify({ type: 'error', message: friendly }));
         }
