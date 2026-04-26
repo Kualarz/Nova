@@ -21,6 +21,7 @@ import { fileURLToPath } from 'url';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getConfig, resetConfig } from '../lib/config.js';
+import { resetModelRouter } from '../providers/router.js';
 import { getDb } from '../db/client.js';
 import { listRecentTasks, createTask, deleteTask } from '../tasks/store.js';
 import { runWebTurn } from '../agent/nova.js';
@@ -312,7 +313,12 @@ export function startWebServer(port = 3000): void {
       }
       if (Object.keys(updates).length > 0) {
         updateDotEnv(updates);
+        // Inject directly into process.env so the running server picks them up
+        for (const [k, v] of Object.entries(updates)) {
+          process.env[k] = v;
+        }
         resetConfig();
+        resetModelRouter();
       }
       res.json({ ok: true, updated: Object.keys(updates) });
     } catch (err) {
