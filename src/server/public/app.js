@@ -1147,13 +1147,20 @@ document.querySelectorAll('.connect-btn').forEach(btn => {
       return;
     }
 
-    // Open modal to connect
+    // Open modal to connect AND auto-open docs page in a new tab
     connectModalKey = key;
     document.getElementById('connect-modal-title').textContent = `Connect ${name}`;
     document.getElementById('connect-modal-doc').href = doc;
     document.getElementById('connect-modal-input').value = '';
     document.getElementById('connect-modal').classList.remove('hidden');
     setTimeout(() => document.getElementById('connect-modal-input').focus(), 50);
+
+    // Auto-open the service's API key page in a new tab so the user
+    // doesn't have to click the link in the modal — the smoothest possible
+    // self-hosted "OAuth-ish" flow without actual OAuth infrastructure.
+    if (doc && doc !== '#') {
+      window.open(doc, '_blank', 'noopener,noreferrer');
+    }
   });
 });
 
