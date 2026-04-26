@@ -436,16 +436,6 @@
             <input id="cfg-OLLAMA_HOST" type="text" placeholder="http://localhost:11434">
             <div class="hint">URL of your local Ollama server</div>
           </div>
-          <div class="field">
-            <label for="cfg-EMBED_MODEL">Embed Model</label>
-            <select id="cfg-EMBED_MODEL">
-              <option value="nomic-embed-text">nomic-embed-text (default)</option>
-              <option value="mxbai-embed-large">mxbai-embed-large</option>
-              <option value="all-minilm">all-minilm</option>
-              <option value="snowflake-arctic-embed">snowflake-arctic-embed</option>
-            </select>
-            <div class="hint">For semantic memory search. Run: <code>ollama pull &lt;model&gt;</code></div>
-          </div>
         </div>
 
         <!-- OpenRouter-specific section -->
@@ -472,6 +462,26 @@
           </div>
         </div>
 
+        <!-- Embeddings (always uses Ollama, regardless of chat provider) -->
+        <div class="settings-subsection">
+          <div class="settings-subsection-title">Embeddings</div>
+          <div class="field">
+            <label for="cfg-EMBED_MODEL">Embed Model</label>
+            <select id="cfg-EMBED_MODEL">
+              <option value="nomic-embed-text">nomic-embed-text (default)</option>
+              <option value="mxbai-embed-large">mxbai-embed-large</option>
+              <option value="all-minilm">all-minilm</option>
+              <option value="snowflake-arctic-embed">snowflake-arctic-embed</option>
+            </select>
+            <div class="hint">Used for semantic memory search. Always runs through Ollama locally — even when chat uses OpenRouter or Anthropic. Run: <code>ollama pull &lt;model&gt;</code></div>
+          </div>
+          <div class="field">
+            <label for="cfg-OLLAMA_HOST_EMBED">Embed Host (Ollama)</label>
+            <input id="cfg-OLLAMA_HOST_EMBED" type="text" placeholder="http://localhost:11434" disabled style="opacity:0.6">
+            <div class="hint">Mirrors the Ollama Host setting above. Embeddings use the same Ollama instance.</div>
+          </div>
+        </div>
+
         <div class="field">
           <label for="cfg-NOVA_WORKFLOWS">Workflows</label>
           <select id="cfg-NOVA_WORKFLOWS">
@@ -484,78 +494,152 @@
 
       <!-- Tab: Database -->
       <div id="stab-database" class="settings-tab-body" style="display:none">
-        <div class="field-row">
+        <div class="field">
+          <label for="cfg-DATABASE_TYPE">Database Type</label>
+          <select id="cfg-DATABASE_TYPE">
+            <option value="local">Local (PGlite) — no setup</option>
+            <option value="supabase">Supabase — cloud Postgres</option>
+          </select>
+          <div class="hint" id="database-hint"></div>
+        </div>
+
+        <!-- Local PGlite section -->
+        <div class="db-section" data-database="local">
           <div class="field">
-            <label for="cfg-DATABASE_TYPE">Type</label>
-            <select id="cfg-DATABASE_TYPE">
-              <option value="local">Local (PGlite)</option>
-              <option value="supabase">Supabase</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="cfg-PGLITE_PATH">PGlite Path</label>
-            <input id="cfg-PGLITE_PATH" type="text" placeholder="./data/db">
+            <label for="cfg-PGLITE_PATH">PGlite Database Path</label>
+            <input id="cfg-PGLITE_PATH" type="text" placeholder="./workspace/nova.db">
+            <div class="hint">Local Postgres database file. Stored on this machine. Zero setup, but no sync between devices.</div>
           </div>
         </div>
-        <div class="field">
-          <label for="cfg-SUPABASE_URL">Supabase URL</label>
-          <input id="cfg-SUPABASE_URL" type="text" placeholder="https://xxx.supabase.co">
-        </div>
-        <div class="field">
-          <label for="cfg-SUPABASE_SERVICE_ROLE_KEY">Service Role Key</label>
-          <div class="flex-row">
-            <input id="cfg-SUPABASE_SERVICE_ROLE_KEY" type="password" autocomplete="off">
-            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-SUPABASE_SERVICE_ROLE_KEY">show</button>
+
+        <!-- Supabase section -->
+        <div class="db-section" data-database="supabase">
+          <div class="field">
+            <label for="cfg-SUPABASE_URL">Supabase URL</label>
+            <input id="cfg-SUPABASE_URL" type="text" placeholder="https://xxxxxxxxxxxx.supabase.co">
+            <div class="hint">Project URL from <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--accent)">supabase.com/dashboard</a> → Project Settings → API</div>
+          </div>
+          <div class="field">
+            <label for="cfg-SUPABASE_SERVICE_ROLE_KEY">Service Role Key</label>
+            <div class="flex-row">
+              <input id="cfg-SUPABASE_SERVICE_ROLE_KEY" type="password" autocomplete="off" placeholder="eyJhbGciOi…">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-SUPABASE_SERVICE_ROLE_KEY">show</button>
+            </div>
+            <div class="hint">Same place as URL — the <strong>service_role</strong> key (NOT the anon key). Keep this secret.</div>
           </div>
         </div>
       </div>
 
       <!-- Tab: Workspace -->
       <div id="stab-workspace" class="settings-tab-body" style="display:none">
+        <div class="settings-explainer">
+          <div class="settings-explainer-title">📁 What is the Workspace?</div>
+          <p>NOVA's workspace is a folder on your computer where it stores everything that makes it <em>yours</em>:</p>
+          <ul>
+            <li><strong>SOUL.md</strong> — NOVA's personality and core values</li>
+            <li><strong>USER.md</strong> — what NOVA knows about you</li>
+            <li><strong>MEMORY.md</strong> — index of personal memories</li>
+            <li><strong>skills/</strong> — custom skills and automations</li>
+            <li><strong>memory/</strong> — daily notes and reflections</li>
+          </ul>
+          <p>NOVA reads and writes these files automatically as you chat. You can also edit them directly in the <strong>Projects</strong> panel.</p>
+        </div>
+
         <div class="field">
           <label for="cfg-NOVA_WORKSPACE_PATH">Workspace Path</label>
           <input id="cfg-NOVA_WORKSPACE_PATH" type="text" placeholder="/path/to/workspace">
+          <div class="hint">Absolute path. Must exist on disk. Move this folder if you want to back up or sync NOVA's "soul".</div>
         </div>
+
         <div class="field">
-          <label for="cfg-GOOGLE_CREDENTIALS_PATH">Google Credentials Path</label>
+          <label for="cfg-GOOGLE_CREDENTIALS_PATH">Google Credentials Path <span style="color:var(--dimmer);font-weight:normal">(optional)</span></label>
           <input id="cfg-GOOGLE_CREDENTIALS_PATH" type="text" placeholder="/path/to/credentials.json">
+          <div class="hint">For Google Calendar / Drive integration. Path to your OAuth credentials JSON file.</div>
         </div>
       </div>
 
       <!-- Tab: Integrations -->
       <div id="stab-integrations" class="settings-tab-body" style="display:none">
-        <div class="field">
-          <label for="cfg-NOTION_API_KEY">Notion API Key</label>
-          <div class="flex-row">
-            <input id="cfg-NOTION_API_KEY" type="password" autocomplete="off">
-            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-NOTION_API_KEY">show</button>
+        <div class="settings-explainer">
+          <div class="settings-explainer-title">🔌 Connections</div>
+          <p>Connect external services to extend what NOVA can do. Each connection requires a personal access token from that service — click <strong>Connect</strong> for step-by-step setup.</p>
+        </div>
+
+        <div class="connect-grid">
+          <!-- Notion -->
+          <div class="connect-card" data-service="notion">
+            <div class="connect-card-icon">📓</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">Notion</div>
+              <div class="connect-card-desc">Read and update your Notion pages and databases</div>
+            </div>
+            <button class="btn connect-btn" data-key="NOTION_API_KEY" data-name="Notion" data-doc="https://www.notion.so/profile/integrations">Connect</button>
+          </div>
+
+          <!-- Web Search -->
+          <div class="connect-card" data-service="websearch">
+            <div class="connect-card-icon">🔍</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">Web Search</div>
+              <div class="connect-card-desc">Search the web for up-to-date info (Brave / Tavily / Serper)</div>
+            </div>
+            <button class="btn connect-btn" data-key="WEB_SEARCH_API_KEY" data-name="Web Search" data-doc="https://api.search.brave.com/app/keys">Connect</button>
+          </div>
+
+          <!-- OpenWeather -->
+          <div class="connect-card" data-service="weather">
+            <div class="connect-card-icon">☀️</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">OpenWeather</div>
+              <div class="connect-card-desc">Real-time weather forecasts in conversations</div>
+            </div>
+            <button class="btn connect-btn" data-key="OPENWEATHER_API_KEY" data-name="OpenWeather" data-doc="https://home.openweathermap.org/api_keys">Connect</button>
+          </div>
+
+          <!-- Telegram -->
+          <div class="connect-card" data-service="telegram">
+            <div class="connect-card-icon">✈️</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">Telegram</div>
+              <div class="connect-card-desc">Chat with NOVA via Telegram bot</div>
+            </div>
+            <button class="btn connect-btn" data-key="TELEGRAM_BOT_TOKEN" data-name="Telegram" data-doc="https://core.telegram.org/bots#how-do-i-create-a-bot">Connect</button>
           </div>
         </div>
-        <div class="field">
-          <label for="cfg-WEB_SEARCH_API_KEY">Web Search API Key</label>
-          <div class="flex-row">
-            <input id="cfg-WEB_SEARCH_API_KEY" type="password" autocomplete="off">
-            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-WEB_SEARCH_API_KEY">show</button>
-          </div>
+
+        <!-- Hidden inputs (for save handler — values mirrored from cards) -->
+        <div style="display:none">
+          <input id="cfg-NOTION_API_KEY" type="password">
+          <input id="cfg-WEB_SEARCH_API_KEY" type="password">
+          <input id="cfg-OPENWEATHER_API_KEY" type="password">
+          <input id="cfg-TELEGRAM_BOT_TOKEN" type="password">
+          <input id="cfg-TELEGRAM_CHAT_ID" type="text">
         </div>
-        <div class="field">
-          <label for="cfg-OPENWEATHER_API_KEY">OpenWeather API Key</label>
-          <div class="flex-row">
-            <input id="cfg-OPENWEATHER_API_KEY" type="password" autocomplete="off">
-            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENWEATHER_API_KEY">show</button>
+      </div>
+
+      <!-- Connect modal (popup) -->
+      <div id="connect-modal" class="connect-modal hidden">
+        <div class="connect-modal-card">
+          <div class="connect-modal-header">
+            <div class="connect-modal-title" id="connect-modal-title">Connect</div>
+            <button class="sb-icon-btn" id="connect-modal-close" type="button">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
           </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="cfg-TELEGRAM_BOT_TOKEN">Telegram Bot Token</label>
-            <div class="flex-row">
-              <input id="cfg-TELEGRAM_BOT_TOKEN" type="password" autocomplete="off">
-              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-TELEGRAM_BOT_TOKEN">show</button>
+          <div class="connect-modal-steps">
+            <div class="connect-step">
+              <div class="connect-step-num">1</div>
+              <div>Get your access token from <a id="connect-modal-doc" href="#" target="_blank" style="color:var(--accent)">the service's settings</a></div>
+            </div>
+            <div class="connect-step">
+              <div class="connect-step-num">2</div>
+              <div>Paste it below and click <strong>Connect</strong></div>
             </div>
           </div>
-          <div class="field">
-            <label for="cfg-TELEGRAM_CHAT_ID">Telegram Chat ID</label>
-            <input id="cfg-TELEGRAM_CHAT_ID" type="text" placeholder="Your Telegram chat ID">
+          <input id="connect-modal-input" type="password" class="connect-modal-input" autocomplete="off" placeholder="Paste your access token…">
+          <div class="connect-modal-actions">
+            <button class="btn" id="connect-modal-cancel" type="button">Cancel</button>
+            <button class="btn btn-primary" id="connect-modal-confirm" type="button">Connect</button>
           </div>
         </div>
       </div>

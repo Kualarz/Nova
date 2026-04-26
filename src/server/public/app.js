@@ -996,6 +996,17 @@ async function loadSettings() {
     setField('TELEGRAM_BOT_TOKEN',       cfg.TELEGRAM_BOT_TOKEN);
     setField('TELEGRAM_CHAT_ID',         cfg.TELEGRAM_CHAT_ID);
     setField('NOVA_WORKFLOWS',           cfg.NOVA_WORKFLOWS);
+
+    // Mirror the Ollama host into the disabled embed-host field
+    const embedHost = document.getElementById('cfg-OLLAMA_HOST_EMBED');
+    if (embedHost) embedHost.value = cfg.OLLAMA_HOST || 'http://localhost:11434';
+
+    // Database tab: show the right section
+    showDatabaseSection(cfg.DATABASE_TYPE || 'local');
+
+    // Integrations tab: refresh connect-button states
+    refreshConnectButtons(cfg);
+
     await loadSettingsModels(cfg.MODEL_PROVIDER, cfg.DEFAULT_MODEL, cfg.COMPLEX_MODEL);
   } catch (e) {
     setSettingsStatus('Failed to load: ' + e.message, 'error');
@@ -1017,6 +1028,25 @@ function showProviderSection(provider) {
     hint.textContent = hints[provider] || '';
   }
 }
+
+// Show/hide the database-specific settings section.
+function showDatabaseSection(type) {
+  document.querySelectorAll('.db-section').forEach(s => {
+    s.classList.toggle('visible', s.dataset.database === type);
+  });
+  const hint = document.getElementById('database-hint');
+  if (hint) {
+    const hints = {
+      local:    'PGlite stores data in a single file on this machine. Best for single-user, offline.',
+      supabase: 'Cloud Postgres with vector search. Best for multi-device sync. Free tier available.',
+    };
+    hint.textContent = hints[type] || '';
+  }
+}
+
+document.getElementById('cfg-DATABASE_TYPE').addEventListener('change', function () {
+  showDatabaseSection(this.value);
+});
 
 // Re-fetch models when provider changes
 document.getElementById('cfg-MODEL_PROVIDER').addEventListener('change', function () {
@@ -1084,6 +1114,89 @@ document.querySelectorAll('.toggle-secret').forEach(btn => {
     else                           { input.type = 'password'; btn.textContent = 'show'; }
   });
 });
+
+// ── Connections (integrations) ────────────────────────────────────────────────
+function refreshConnectButtons(cfg) {
+  document.querySelectorAll('.connect-btn').forEach(btn => {
+    const key = btn.dataset.key;
+    const value = cfg ? cfg[key] : document.getElementById('cfg-' + key)?.value;
+    // Server returns masked values like "••••" for set secrets — any non-empty
+    // string means the integration is connected.
+    const isConnected = value && String(value).length > 0;
+    btn.classList.toggle('connected', !!isConnected);
+    btn.textContent = isConnected ? 'Connected' : 'Connect';
+  });
+}
+
+let connectModalKey = null;
+
+document.querySelectorAll('.connect-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.key;
+    const name = btn.dataset.name;
+    const doc = btn.dataset.doc;
+    const isConnected = btn.classList.contains('connected');
+
+    if (isConnected) {
+      // Disconnect: clear the value
+      if (confirm(`Disconnect ${name}? Your stored token will be removed from .env`)) {
+        const hidden = document.getElementById('cfg-' + key);
+        if (hidden) hidden.value = '';
+        triggerSettingsSave().then(() => refreshConnectButtons());
+      }
+      return;
+    }
+
+    // Open modal to connect
+    connectModalKey = key;
+    document.getElementById('connect-modal-title').textContent = `Connect ${name}`;
+    document.getElementById('connect-modal-doc').href = doc;
+    document.getElementById('connect-modal-input').value = '';
+    document.getElementById('connect-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('connect-modal-input').focus(), 50);
+  });
+});
+
+function closeConnectModal() {
+  document.getElementById('connect-modal').classList.add('hidden');
+  connectModalKey = null;
+}
+
+document.getElementById('connect-modal-close').addEventListener('click', closeConnectModal);
+document.getElementById('connect-modal-cancel').addEventListener('click', closeConnectModal);
+document.getElementById('connect-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('connect-modal')) closeConnectModal();
+});
+
+document.getElementById('connect-modal-confirm').addEventListener('click', async () => {
+  const value = document.getElementById('connect-modal-input').value.trim();
+  if (!value) return;
+  if (!connectModalKey) return;
+  const hidden = document.getElementById('cfg-' + connectModalKey);
+  if (hidden) hidden.value = value;
+  closeConnectModal();
+  await triggerSettingsSave();
+  refreshConnectButtons();
+});
+
+async function triggerSettingsSave() {
+  const fields = ['NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'];
+  const body = {};
+  for (const f of fields) {
+    const el = document.getElementById('cfg-' + f);
+    if (el) body[f] = el.value;
+  }
+  try {
+    await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    setSettingsStatus('Saved', 'ok');
+  } catch (e) {
+    setSettingsStatus('Save failed: ' + e.message, 'error');
+  }
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 connectWS();
