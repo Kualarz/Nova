@@ -22,7 +22,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getConfig, resetConfig } from '../lib/config.js';
 import { resetModelRouter } from '../providers/router.js';
-import { getDb } from '../db/client.js';
+import { getDb, resetDb } from '../db/client.js';
 import { listRecentTasks, createTask, deleteTask } from '../tasks/store.js';
 import { runWebTurn } from '../agent/nova.js';
 import { buildBaseSystemPrompt } from '../agent/system-prompt.js';
@@ -362,6 +362,12 @@ export function startWebServer(port = 3000): void {
         }
         resetConfig();
         resetModelRouter();
+        // If DB-related keys changed, reset the cached DB provider so the next
+        // request reinstantiates with the new DATABASE_TYPE / connection params.
+        if (updates['DATABASE_TYPE'] || updates['SUPABASE_URL'] ||
+            updates['SUPABASE_SERVICE_ROLE_KEY'] || updates['PGLITE_PATH']) {
+          resetDb();
+        }
       }
       res.json({ ok: true, updated: Object.keys(updates) });
     } catch (err) {
