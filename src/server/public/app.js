@@ -31,6 +31,58 @@ document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => switchPanel(item.dataset.panel));
 });
 
+// ── Sidebar collapse ──────────────────────────────────────────────────────────
+document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+});
+
+// ── Sidebar search ────────────────────────────────────────────────────────────
+let searchVisible = false;
+document.getElementById('sidebar-search-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  searchVisible = !searchVisible;
+  const wrap = document.getElementById('sb-search-wrap');
+  wrap.classList.toggle('hidden', !searchVisible);
+  if (searchVisible) document.getElementById('sb-search-input').focus();
+});
+
+document.getElementById('sb-search-input').addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#recents-list .conv-item').forEach(el => {
+    const title = el.querySelector('.conv-title')?.textContent?.toLowerCase() ?? '';
+    el.style.display = title.includes(q) ? '' : 'none';
+  });
+  const label = document.getElementById('recents-label');
+  if (label) label.style.display = q ? 'none' : '';
+});
+
+// ── Recent conversations ──────────────────────────────────────────────────────
+async function loadConversations() {
+  const list = document.getElementById('recents-list');
+  try {
+    const convs = await apiFetch('/api/conversations');
+    if (!convs.length) {
+      list.innerHTML = '<div class="conv-placeholder">No conversations yet</div>';
+      return;
+    }
+    list.innerHTML = convs.map(c => {
+      const title = c.first_message
+        ? c.first_message.slice(0, 60).replace(/\n/g, ' ')
+        : 'Untitled conversation';
+      return `
+        <div class="conv-item" data-id="${escapeHtml(c.id)}" title="${escapeHtml(title)}">
+          <span class="conv-title">${escapeHtml(title)}</span>
+        </div>
+      `;
+    }).join('');
+  } catch {
+    list.innerHTML = '<div class="conv-placeholder">—</div>';
+  }
+}
+
+// Load conversations on startup
+loadConversations();
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtTime(iso) {
   if (!iso) return '—';

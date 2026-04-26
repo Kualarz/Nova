@@ -43,105 +43,122 @@ html, body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 0;
   overflow: hidden;
-}
-
-.sidebar-logo {
-  padding: 18px 14px 10px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sidebar-logo .dot {
-  width: 8px; height: 8px;
-  background: var(--green);
-  border-radius: 50%;
-  display: inline-block;
-  animation: pulse 2s infinite;
+  transition: width 200ms ease, min-width 200ms ease;
   flex-shrink: 0;
 }
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+#sidebar.collapsed { width: 56px; min-width: 56px; }
 
-/* "New Chat" button */
-.sidebar-new-chat {
+/* Top bar */
+.sb-topbar {
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin: 4px 8px 6px;
-  padding: 9px 12px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition);
-  width: calc(100% - 16px);
-  text-align: left;
+  justify-content: space-between;
+  padding: 10px 8px 4px;
+  flex-shrink: 0;
 }
-.sidebar-new-chat:hover {
-  background: rgba(255,255,255,0.09);
-  border-color: rgba(255,255,255,0.18);
-}
-.sidebar-new-chat svg { color: var(--dim); flex-shrink: 0; }
+.sb-topbar-right { display: flex; align-items: center; gap: 2px; }
 
-/* Nav section label */
-.sidebar-section {
-  padding: 10px 14px 4px;
-  font-size: 11px;
-  color: var(--dimmer);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  margin: 1px 8px;
+.sb-icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 6px;
+  background: none; border: none; cursor: pointer;
   color: var(--dim);
-  cursor: pointer;
-  border-radius: 8px;
-  font-size: 13px;
-  transition: color var(--transition), background var(--transition);
+  transition: background var(--transition), color var(--transition);
+  flex-shrink: 0;
+}
+.sb-icon-btn:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+
+/* Search bar */
+.sb-search-wrap { padding: 4px 10px 6px; flex-shrink: 0; }
+.sb-search-wrap.hidden { display: none; }
+.sb-search-input {
+  width: 100%; padding: 6px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border2); border-radius: 8px;
+  color: var(--text); font-family: var(--font-sans); font-size: 13px;
+  outline: none;
+}
+.sb-search-input::placeholder { color: var(--dimmer); }
+.sb-search-input:focus { border-color: rgba(255,255,255,0.2); }
+
+/* Nav items */
+.sb-nav { padding: 4px 8px; flex-shrink: 0; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 8px;
+  cursor: pointer; font-size: 13.5px; font-weight: 450;
+  color: var(--dim);
+  transition: background var(--transition), color var(--transition);
+  white-space: nowrap; overflow: hidden;
   user-select: none;
 }
 .nav-item:hover  { color: var(--text); background: rgba(255,255,255,0.06); }
 .nav-item.active { color: var(--text); background: rgba(255,255,255,0.1); }
-.nav-item .icon  { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; }
+.nav-icon { flex-shrink: 0; }
 
-/* Sidebar bottom: user info */
+/* Collapsed state — hide labels */
+#sidebar.collapsed .nav-label,
+#sidebar.collapsed .sb-section-label,
+#sidebar.collapsed .sb-history,
+#sidebar.collapsed .sb-search-wrap,
+#sidebar.collapsed .sidebar-user-info { display: none; }
+#sidebar.collapsed .sb-topbar { justify-content: center; }
+#sidebar.collapsed .sb-topbar-right { display: none; }
+#sidebar.collapsed .nav-item { justify-content: center; padding: 9px; }
+#sidebar.collapsed .sidebar-user { justify-content: center; padding: 12px 0; }
+#sidebar.collapsed .sidebar-user-avatar { margin: 0; }
+
+/* Conversation history */
+.sb-history {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 4px 0 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.sb-history::-webkit-scrollbar { width: 4px; }
+.sb-history::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.sb-section-label {
+  padding: 8px 18px 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--dimmer); text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.conv-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 16px; cursor: pointer;
+  font-size: 13px; color: var(--dim);
+  transition: background var(--transition), color var(--transition);
+  white-space: nowrap; overflow: hidden;
+}
+.conv-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+.conv-item.active { background: rgba(255,255,255,0.08); color: var(--text); }
+.conv-pin-icon { flex-shrink: 0; color: var(--dimmer); }
+.conv-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-placeholder { padding: 8px 18px; font-size: 12px; color: var(--dimmer); }
+
+/* User info */
 .sidebar-user {
-  margin-top: auto;
+  display: flex; align-items: center; gap: 10px;
   padding: 12px 14px;
   border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  cursor: pointer; flex-shrink: 0;
+  transition: background var(--transition);
 }
+.sidebar-user:hover { background: rgba(255,255,255,0.04); }
 .sidebar-user-avatar {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  background: #3b3b52;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: #fff; flex-shrink: 0;
 }
 .sidebar-user-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
 .sidebar-user-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-user-role { font-size: 11px; color: var(--dimmer); }
+
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
 
 /* ── Content area ────────────────────────────────────────────────────────────── */
 #content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }

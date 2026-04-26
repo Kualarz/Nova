@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -163,6 +163,22 @@ export class LocalProvider implements DatabaseProvider {
       toolInput: r.tool_input ? JSON.parse(r.tool_input) as unknown : undefined,
       toolOutput: r.tool_output ? JSON.parse(r.tool_output) as unknown : undefined,
     }));
+  }
+
+  async listConversations(userId: string, limit: number): Promise<ConversationSummary[]> {
+    const db = await this.getDb();
+    const result = await db.query<ConversationSummary>(
+      `SELECT c.id, c.started_at, c.ended_at,
+         (SELECT m.content FROM messages m
+          WHERE m.conversation_id = c.id AND m.role = 'user'
+          ORDER BY m.created_at ASC LIMIT 1) AS first_message
+       FROM conversations c
+       WHERE c.user_id = $1
+       ORDER BY c.started_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows;
   }
 
   async logEvent(userId: string, type: string, payload: unknown): Promise<void> {

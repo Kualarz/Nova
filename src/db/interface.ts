@@ -95,6 +95,13 @@ export interface ConversationMessage {
   toolOutput?: unknown;
 }
 
+export interface ConversationSummary {
+  id: string;
+  started_at: string;
+  ended_at: string | null;
+  first_message: string | null;
+}
+
 export interface DatabaseProvider {
   // Memories
   insertMemory(params: InsertMemoryParams): Promise<string>;
@@ -108,6 +115,7 @@ export interface DatabaseProvider {
   appendConversationMessage(conversationId: string, msg: ConversationMessage): Promise<void>;
   endConversation(id: string, summary?: string): Promise<void>;
   getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
+  listConversations(userId: string, limit: number): Promise<ConversationSummary[]>;
 
   // Events
   logEvent(userId: string, type: string, payload: unknown): Promise<void>;

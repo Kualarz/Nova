@@ -247,6 +247,17 @@ export function startWebServer(port = 3000): void {
     }
   });
 
+  app.get('/api/conversations', async (_req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const convs = await db.listConversations(config.NOVA_USER_ID, 40);
+      res.json(convs);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   app.get('/api/workspace', (_req, res) => {
     try {
       const config = getConfig();

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -115,6 +115,23 @@ export class SupabaseProvider implements DatabaseProvider {
       toolName: r.tool_name as string | undefined,
       toolInput: r.tool_input,
       toolOutput: r.tool_output,
+    }));
+  }
+
+  async listConversations(userId: string, limit: number): Promise<ConversationSummary[]> {
+    const { data, error } = await this.client
+      .from('conversations')
+      .select('id, started_at, ended_at')
+      .eq('user_id', userId)
+      .order('started_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`listConversations failed: ${error.message}`);
+    // first_message requires a join — return null for Supabase (no RPC available here)
+    return (data ?? []).map(r => ({
+      id: r.id as string,
+      started_at: r.started_at as string,
+      ended_at: r.ended_at as string | null,
+      first_message: null,
     }));
   }
 
