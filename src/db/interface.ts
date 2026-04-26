@@ -102,6 +102,20 @@ export interface ConversationSummary {
   first_message: string | null;
 }
 
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectWithStats extends Project {
+  chat_count: number;
+}
+
 export interface DatabaseProvider {
   // Memories
   insertMemory(params: InsertMemoryParams): Promise<string>;
@@ -136,6 +150,15 @@ export interface DatabaseProvider {
   deleteTask(id: string): Promise<void>;
   listTasks(userId: string, limit: number): Promise<Task[]>;
   getTaskCount(userId: string): Promise<number>;
+
+  // Projects
+  listProjects(userId: string): Promise<ProjectWithStats[]>;
+  getProject(id: string): Promise<Project | null>;
+  createProject(userId: string, name: string, description?: string, instructions?: string): Promise<string>;
+  updateProject(id: string, updates: { name?: string; description?: string; instructions?: string }): Promise<void>;
+  deleteProject(id: string): Promise<void>;
+  listProjectConversations(projectId: string): Promise<Array<{ id: string; started_at: string; ended_at: string | null; first_message: string | null }>>;
+  linkConversationToProject(conversationId: string, projectId: string | null): Promise<void>;
 
   // Stats
   getSessionStats(userId: string): Promise<SessionStats>;

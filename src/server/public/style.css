@@ -1150,3 +1150,74 @@ button.sidebar-user {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── Projects panel ────────────────────────────────────────────────────────── */
+.projects-body { padding: 24px 32px; overflow-y: auto; flex: 1; }
+.projects-body.hidden { display: none; }
+
+.projects-empty { text-align: center; padding: 80px 20px; }
+.projects-empty.hidden { display: none; }
+.projects-empty-icon { font-size: 56px; margin-bottom: 16px; }
+.projects-empty-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.projects-empty-desc { font-size: 13px; color: var(--dim); max-width: 380px; margin: 0 auto 20px; line-height: 1.5; }
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.project-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+.project-card:hover { border-color: var(--border2); background: rgba(255,255,255,0.05); }
+.project-card-name { font-size: 14.5px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.project-card-desc { font-size: 12.5px; color: var(--dim); line-height: 1.5; max-height: 38px; overflow: hidden; }
+.project-card-meta { font-size: 11px; color: var(--dimmer); margin-top: 10px; display: flex; gap: 12px; }
+
+.project-detail-header { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+.project-detail-name {
+  flex: 1; font-size: 22px; font-weight: 600; color: var(--text);
+  background: none; border: none; outline: none; padding: 4px 0;
+  font-family: var(--font-sans);
+}
+.project-detail-name:focus { border-bottom: 1px solid var(--accent); }
+.project-detail-actions { display: flex; gap: 8px; }
+
+.project-chats-section { margin-top: 24px; }
+.project-chats-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px; font-size: 13px; color: var(--dim); font-weight: 500;
+}
+.project-chat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background var(--transition);
+}
+.project-chat-row:hover { background: rgba(255,255,255,0.04); }
+.project-chat-title { font-size: 13px; color: var(--text); }
+.project-chat-meta { font-size: 11px; color: var(--dimmer); }
+.project-chats-empty { padding: 24px; text-align: center; font-size: 12.5px; color: var(--dimmer); }
+
+/* ── Memory panel ──────────────────────────────────────────────────────────── */
+.memory-body { padding: 20px 28px; overflow-y: auto; flex: 1; }
+.memory-explainer { background: rgba(167,139,250,0.06); border: 1px solid rgba(167,139,250,0.2); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; font-size: 13px; color: var(--dim); line-height: 1.55; }
+.memory-explainer p { margin: 6px 0 0; }
+.memory-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.memory-stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.memory-stat-value { font-size: 22px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.memory-stat-label { font-size: 11px; color: var(--dimmer); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.memory-search-bar { margin-bottom: 14px; }
+.memory-search-bar input { width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); font-family: var(--font-sans); font-size: 13px; outline: none; }
+.memory-search-bar input:focus { border-color: var(--accent); }
+.memory-list { display: flex; flex-direction: column; gap: 8px; }
+.memory-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; transition: border-color var(--transition); }
+.memory-card:hover { border-color: var(--border2); }
+.memory-card-content { font-size: 13px; color: var(--text); line-height: 1.5; }
+.memory-card-footer { display: flex; gap: 12px; align-items: center; margin-top: 8px; font-size: 11px; color: var(--dimmer); }
+.memory-card-category { padding: 2px 8px; background: rgba(167,139,250,0.15); color: var(--accent); border-radius: 12px; font-weight: 500; }
+.memory-empty { text-align: center; padding: 40px 20px; color: var(--dimmer); font-size: 13px; }

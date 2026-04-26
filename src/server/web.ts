@@ -60,6 +60,7 @@ const WRITABLE_KEYS = new Set([
   'WEB_SEARCH_API_KEY', 'OPENWEATHER_API_KEY',
   'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID',
   'NOVA_WORKFLOWS',
+  'PROFILE_NAME', 'PROFILE_BACKGROUND', 'PROFILE_STYLE',
 ]);
 
 function maskSecret(key: string, value: string): string {
@@ -288,6 +289,56 @@ export function startWebServer(port = 3000): void {
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
+  });
+
+  // ── Projects CRUD ───────────────────────────────────────────────────────────
+  app.get('/api/projects', async (_req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const projects = await db.listProjects(config.NOVA_USER_ID);
+      res.json(projects);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/projects', async (req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const { name, description, instructions } = req.body as { name?: string; description?: string; instructions?: string };
+      if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+      const id = await db.createProject(config.NOVA_USER_ID, name.trim(), description?.trim() || '', instructions?.trim() || '');
+      const project = await db.getProject(id);
+      res.json(project);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.get('/api/projects/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      const project = await db.getProject(req.params.id);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      const conversations = await db.listProjectConversations(req.params.id);
+      res.json({ ...project, conversations });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.patch('/api/projects/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      const { name, description, instructions } = req.body as { name?: string; description?: string; instructions?: string };
+      await db.updateProject(req.params.id, { name, description, instructions });
+      const project = await db.getProject(req.params.id);
+      res.json(project);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.delete('/api/projects/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      await db.deleteProject(req.params.id);
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
   });
 
   app.get('/api/workspace', (_req, res) => {

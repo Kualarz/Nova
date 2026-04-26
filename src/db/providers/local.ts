@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -150,6 +150,73 @@ export class LocalProvider implements DatabaseProvider {
     // Cascade: messages should already be ON DELETE CASCADE, but be safe
     await db.query(`DELETE FROM messages WHERE conversation_id = $1`, [id]);
     await db.query(`DELETE FROM conversations WHERE id = $1`, [id]);
+  }
+
+  async listProjects(userId: string): Promise<ProjectWithStats[]> {
+    const db = await this.getDb();
+    const result = await db.query<ProjectWithStats>(
+      `SELECT p.id, p.user_id, p.name, p.description, p.instructions, p.created_at, p.updated_at,
+         (SELECT COUNT(*) FROM conversations c WHERE c.project_id = p.id)::int AS chat_count
+       FROM projects p
+       WHERE p.user_id = $1
+       ORDER BY p.updated_at DESC`,
+      [userId]
+    );
+    return result.rows;
+  }
+
+  async getProject(id: string): Promise<Project | null> {
+    const db = await this.getDb();
+    const r = await db.query<Project>(`SELECT * FROM projects WHERE id = $1`, [id]);
+    return r.rows[0] ?? null;
+  }
+
+  async createProject(userId: string, name: string, description = '', instructions = ''): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO projects (user_id, name, description, instructions) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [userId, name, description, instructions]
+    );
+    return r.rows[0]!.id;
+  }
+
+  async updateProject(id: string, updates: { name?: string; description?: string; instructions?: string }): Promise<void> {
+    const db = await this.getDb();
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+    if (updates.name !== undefined)         { fields.push(`name = $${i++}`);         values.push(updates.name); }
+    if (updates.description !== undefined)  { fields.push(`description = $${i++}`);  values.push(updates.description); }
+    if (updates.instructions !== undefined) { fields.push(`instructions = $${i++}`); values.push(updates.instructions); }
+    if (!fields.length) return;
+    fields.push(`updated_at = now()::text`);
+    values.push(id);
+    await db.query(`UPDATE projects SET ${fields.join(', ')} WHERE id = $${i}`, values);
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    const db = await this.getDb();
+    await db.query(`DELETE FROM projects WHERE id = $1`, [id]);
+  }
+
+  async listProjectConversations(projectId: string): Promise<Array<{ id: string; started_at: string; ended_at: string | null; first_message: string | null }>> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string; started_at: string; ended_at: string | null; first_message: string | null }>(
+      `SELECT c.id, c.started_at, c.ended_at,
+         (SELECT m.content FROM messages m
+          WHERE m.conversation_id = c.id AND m.role = 'user'
+          ORDER BY m.created_at ASC LIMIT 1) AS first_message
+       FROM conversations c
+       WHERE c.project_id = $1
+       ORDER BY c.started_at DESC`,
+      [projectId]
+    );
+    return r.rows;
+  }
+
+  async linkConversationToProject(conversationId: string, projectId: string | null): Promise<void> {
+    const db = await this.getDb();
+    await db.query(`UPDATE conversations SET project_id = $1 WHERE id = $2`, [projectId, conversationId]);
   }
 
   async getConversationMessages(conversationId: string): Promise<ConversationMessage[]> {

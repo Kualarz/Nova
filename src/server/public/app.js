@@ -23,7 +23,7 @@ function switchPanel(name) {
   if (name === 'status')    loadStatus();
   if (name === 'memory')    loadMemories();
   if (name === 'tasks')     loadTasks();
-  if (name === 'workspace') loadWorkspaceTree();
+  if (name === 'workspace') loadProjectsList();
   if (name === 'settings')  loadSettings();
 }
 
@@ -373,6 +373,34 @@ async function loadStatus() {
     document.getElementById('stat-tasks-running').textContent = s.tasks?.running ?? '0';
     document.getElementById('stat-tasks-done').textContent    = s.tasks?.done ?? '0';
     document.getElementById('stat-tasks-error').textContent   = s.tasks?.error ?? '0';
+
+    // ── New large cards (AI Configuration) ────────────────────────────────
+    const provLarge   = document.getElementById('stat-provider-large');
+    const modelLarge  = document.getElementById('stat-model-large');
+    const embedLarge  = document.getElementById('stat-embed-model');
+    const provStatus  = document.getElementById('stat-provider-status');
+    if (provLarge)  provLarge.textContent  = (s.provider || '—').toUpperCase();
+    if (modelLarge) modelLarge.textContent = s.model || '—';
+    if (embedLarge) embedLarge.textContent = 'nomic-embed-text';
+    if (provStatus) provStatus.textContent = s.database === 'local' ? 'PGlite local' : 'Supabase';
+
+    // ── Integrations status ───────────────────────────────────────────────
+    try {
+      const cfg = await apiFetch('/api/settings');
+      const checks = [
+        { key: 'NOTION_API_KEY',          name: 'Notion' },
+        { key: 'GOOGLE_CREDENTIALS_PATH', name: 'Google' },
+        { key: 'WEB_SEARCH_API_KEY',      name: 'Web Search' },
+        { key: 'OPENWEATHER_API_KEY',     name: 'Weather' },
+        { key: 'TELEGRAM_BOT_TOKEN',      name: 'Telegram' },
+      ];
+      const integHtml = checks.map(c => {
+        const connected = cfg[c.key] && String(cfg[c.key]).length > 0;
+        return `<div class="stat-card"><div class="stat-label">${c.name}</div><div class="stat-value" style="font-size:13px;color:${connected ? 'var(--green)' : 'var(--dimmer)'}">${connected ? '● Connected' : '○ Not connected'}</div></div>`;
+      }).join('');
+      const intEl = document.getElementById('status-integrations');
+      if (intEl) intEl.innerHTML = integHtml;
+    } catch {}
   } catch (e) {
     console.error('status load failed', e);
   }
@@ -805,129 +833,151 @@ function updateModelLabel(model) {
   document.getElementById('model-btn-label').textContent = shortModelName(model) || 'model';
 }
 
-// ── WORKSPACE PANEL ───────────────────────────────────────────────────────────
-async function loadWorkspaceTree() {
+// ── PROJECTS PANEL ────────────────────────────────────────────────────────────
+let _currentProject = null; // { id, ...project, conversations: [] } when viewing detail
+
+async function loadProjectsList() {
+  const grid = document.getElementById('projects-grid');
+  const empty = document.getElementById('projects-empty');
+  document.getElementById('projects-list-view').classList.remove('hidden');
+  document.getElementById('project-detail-view').classList.add('hidden');
+
   try {
-    const files = await apiFetch('/api/workspace');
-    renderWorkspaceTree(files);
-  } catch (e) {
-    const tree = document.getElementById('file-tree');
-    tree.innerHTML = `<div class="ws-error">Failed to load: ${escapeHtml(e.message)}</div>`;
-  }
-}
-
-function renderWorkspaceTree(files) {
-  const tree = document.getElementById('file-tree');
-  tree.innerHTML = '';
-
-  const groups = {
-    'Root': files.filter(f => !f.includes('/')),
-    'Skills': files.filter(f => f.startsWith('skills/')),
-    'Daily Notes': files.filter(f => f.startsWith('memory/')),
-  };
-
-  for (const [label, group] of Object.entries(groups)) {
-    if (!group.length) continue;
-    const section = document.createElement('div');
-    section.className = 'file-tree-section';
-    section.innerHTML = `<div class="file-tree-label">${label}</div>`;
-    for (const f of group) {
-      const item = document.createElement('div');
-      item.className = 'file-item';
-      if (f === currentFile) item.classList.add('active');
-      item.textContent = f.split('/').pop();
-      item.title = f;
-      item.addEventListener('click', () => openFile(f));
-      section.appendChild(item);
+    const projects = await apiFetch('/api/projects');
+    if (!projects.length) {
+      empty.classList.remove('hidden');
+      grid.innerHTML = '';
+      return;
     }
-    tree.appendChild(section);
-  }
-}
-
-async function openFile(filePath) {
-  // Warn about unsaved changes
-  if (currentFile && fileModified()) {
-    if (!confirm('You have unsaved changes. Discard them?')) return;
-  }
-  try {
-    const data = await apiFetch('/api/workspace/' + filePath);
-    currentFile    = filePath;
-    fileOriginal   = data.content;
-
-    document.getElementById('editor-filename').textContent = filePath;
-    document.getElementById('editor-filename').className   = 'editor-filename';
-    document.getElementById('file-content').value = data.content;
-    document.getElementById('editor-placeholder').style.display = 'none';
-    document.getElementById('editor-main').style.display = 'flex';
-    setEditorStatus('');
-
-    // Update tree selection
-    document.querySelectorAll('.file-item').forEach(el => {
-      el.classList.toggle('active', el.title === filePath);
+    empty.classList.add('hidden');
+    grid.innerHTML = projects.map(p => `
+      <div class="project-card" data-id="${escapeHtml(p.id)}">
+        <div class="project-card-name">${escapeHtml(p.name)}</div>
+        <div class="project-card-desc">${escapeHtml(p.description || 'No description')}</div>
+        <div class="project-card-meta">
+          <span>💬 ${p.chat_count} chat${p.chat_count === 1 ? '' : 's'}</span>
+          <span>${fmtAge(p.updated_at)}</span>
+        </div>
+      </div>
+    `).join('');
+    grid.querySelectorAll('.project-card').forEach(card => {
+      card.addEventListener('click', () => openProject(card.dataset.id));
     });
   } catch (e) {
-    setEditorStatus('Failed to load: ' + e.message, 'error');
-    document.getElementById('editor-placeholder').style.display = 'flex';
-    document.getElementById('editor-main').style.display = 'none';
+    grid.innerHTML = `<div class="projects-empty-desc" style="color:var(--red)">Failed to load: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-function fileModified() {
-  return document.getElementById('file-content').value !== fileOriginal;
+async function openProject(id) {
+  try {
+    _currentProject = await apiFetch('/api/projects/' + encodeURIComponent(id));
+    renderProjectDetail();
+  } catch (e) {
+    alert('Failed to load project: ' + e.message);
+  }
 }
 
-document.getElementById('file-content').addEventListener('input', () => {
-  const el = document.getElementById('editor-filename');
-  if (fileModified()) el.classList.add('modified');
-  else el.classList.remove('modified');
+function renderProjectDetail() {
+  const p = _currentProject;
+  if (!p) return;
+  document.getElementById('projects-list-view').classList.add('hidden');
+  document.getElementById('project-detail-view').classList.remove('hidden');
+  document.getElementById('project-detail-name').value         = p.name || '';
+  document.getElementById('project-detail-desc').value         = p.description || '';
+  document.getElementById('project-detail-instructions').value = p.instructions || '';
+
+  const list = document.getElementById('project-chats-list');
+  if (!p.conversations || !p.conversations.length) {
+    list.innerHTML = '<div class="project-chats-empty">No chats yet. Start one with the button above.</div>';
+    return;
+  }
+  list.innerHTML = p.conversations.map(c => {
+    const title = c.first_message ? c.first_message.slice(0, 80).replace(/\n/g, ' ') : 'Untitled';
+    return `
+      <div class="project-chat-row" data-id="${escapeHtml(c.id)}">
+        <div class="project-chat-title">${escapeHtml(title)}</div>
+        <div class="project-chat-meta">${fmtAge(c.started_at)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+document.getElementById('project-back-btn').addEventListener('click', () => {
+  _currentProject = null;
+  loadProjectsList();
 });
 
-function setEditorStatus(msg, cls) {
-  const el = document.getElementById('editor-status');
-  el.textContent = msg;
-  el.className   = 'editor-status' + (cls ? ' ' + cls : '');
-}
-
-document.getElementById('save-btn').addEventListener('click', async () => {
-  if (!currentFile) return;
+document.getElementById('project-save-btn').addEventListener('click', async () => {
+  if (!_currentProject) return;
+  const updates = {
+    name: document.getElementById('project-detail-name').value.trim(),
+    description: document.getElementById('project-detail-desc').value.trim(),
+    instructions: document.getElementById('project-detail-instructions').value.trim(),
+  };
   try {
-    setEditorStatus('Saving…');
-    await apiFetch('/api/workspace/' + currentFile, {
-      method: 'PUT',
+    await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: document.getElementById('file-content').value }),
+      body: JSON.stringify(updates),
     });
-    fileOriginal = document.getElementById('file-content').value;
-    document.getElementById('editor-filename').classList.remove('modified');
-    setEditorStatus('Saved  (backup: ' + currentFile + '.bak)', 'ok');
-  } catch (e) {
-    setEditorStatus('Save failed: ' + e.message, 'error');
-  }
+    // refetch with conversations
+    _currentProject = await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id));
+    alert('Saved');
+  } catch (e) { alert('Save failed: ' + e.message); }
 });
 
-document.getElementById('discard-btn').addEventListener('click', () => {
-  if (!currentFile) return;
-  document.getElementById('file-content').value = fileOriginal;
-  document.getElementById('editor-filename').classList.remove('modified');
-  setEditorStatus('Changes discarded');
-});
-
-document.getElementById('new-skill-btn').addEventListener('click', async () => {
-  const name = prompt('Skill filename (without .md):');
-  if (!name || !name.trim()) return;
-  const filename = name.trim().replace(/[^a-z0-9-_]/gi, '-').toLowerCase() + '.md';
-  const template = `---\nname: ${name.trim()}\ndescription: Describe when NOVA should use this skill.\n---\n\n# ${name.trim()}\n\nWrite skill instructions here.\n`;
+document.getElementById('project-delete-btn').addEventListener('click', async () => {
+  if (!_currentProject) return;
+  if (!confirm(`Delete project "${_currentProject.name}"? Chats inside will remain but become unlinked.`)) return;
   try {
-    await apiFetch('/api/workspace/skills/' + filename, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: template }),
-    });
-    await loadWorkspaceTree();
-    await openFile('skills/' + filename);
-  } catch (e) {
-    alert('Failed to create skill: ' + e.message);
+    await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), { method: 'DELETE' });
+    _currentProject = null;
+    loadProjectsList();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+});
+
+document.getElementById('project-new-chat-btn').addEventListener('click', () => {
+  if (_currentProject) {
+    sessionStorage.setItem('nova:active-project', _currentProject.id);
   }
+  switchPanel('chat');
+  document.getElementById('chat-messages').innerHTML = '';
+  _hasMessages = false;
+  setWelcome(true);
+  if (ws) ws.close();
+});
+
+// Create project modal
+const createProjectModal = document.getElementById('create-project-modal');
+function openCreateProject() {
+  document.getElementById('create-project-name').value = '';
+  document.getElementById('create-project-desc').value = '';
+  createProjectModal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('create-project-name').focus(), 50);
+}
+function closeCreateProject() { createProjectModal.classList.add('hidden'); }
+
+document.getElementById('new-project-btn').addEventListener('click', openCreateProject);
+document.getElementById('projects-empty-create-btn').addEventListener('click', openCreateProject);
+document.getElementById('create-project-close').addEventListener('click', closeCreateProject);
+document.getElementById('create-project-cancel').addEventListener('click', closeCreateProject);
+createProjectModal.addEventListener('click', e => {
+  if (e.target === createProjectModal) closeCreateProject();
+});
+
+document.getElementById('create-project-confirm').addEventListener('click', async () => {
+  const name = document.getElementById('create-project-name').value.trim();
+  const description = document.getElementById('create-project-desc').value.trim();
+  if (!name) { alert('Name is required'); return; }
+  try {
+    const project = await apiFetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description }),
+    });
+    closeCreateProject();
+    await openProject(project.id);
+  } catch (e) { alert('Create failed: ' + e.message); }
 });
 
 // ── MEMORY PANEL ──────────────────────────────────────────────────────────────
@@ -935,25 +985,37 @@ async function loadMemories() {
   try {
     allMemories = await apiFetch('/api/memories');
     renderMemories(allMemories);
+    updateMemoryStats(allMemories);
   } catch (e) {
-    console.error('memories load failed', e);
+    document.getElementById('memory-list').innerHTML =
+      `<div class="memory-empty" style="color:var(--red)">Failed: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+function updateMemoryStats(mems) {
+  const byCat = {};
+  for (const m of mems) byCat[m.category] = (byCat[m.category] || 0) + 1;
+  const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setStat('mem-total',       mems.length);
+  setStat('mem-personal',    byCat['personal']   || 0);
+  setStat('mem-preferences', byCat['preference'] || 0);
+  setStat('mem-projects',    byCat['project']    || 0);
 }
 
 function renderMemories(memories) {
   const list = document.getElementById('memory-list');
   if (!memories.length) {
-    list.innerHTML = '<div class="empty-state">No memories yet — chat with NOVA to build them up.</div>';
+    list.innerHTML = '<div class="memory-empty">No memories yet. Have a conversation with NOVA — important facts will be stored here automatically.</div>';
     return;
   }
   list.innerHTML = memories.map(m => `
     <div class="memory-card">
-      <div class="memory-card-meta">
-        <span class="mem-badge ${m.category}">${m.category}</span>
-        <span class="mem-date">${fmtDate(m.created_at)}</span>
-        <span class="mem-conf">${Math.round((m.confidence ?? 1) * 100)}% conf · ${m.access_count ?? 0} accesses</span>
-      </div>
       <div class="memory-card-content">${escapeHtml(m.content)}</div>
+      <div class="memory-card-footer">
+        <span class="memory-card-category">${escapeHtml(m.category || 'note')}</span>
+        <span>${fmtAge(m.created_at)}</span>
+        <span>confidence: ${Math.round((m.confidence ?? 1) * 100)}%</span>
+      </div>
     </div>
   `).join('');
 }
@@ -1145,6 +1207,9 @@ async function loadSettings() {
     setField('TELEGRAM_BOT_TOKEN',       cfg.TELEGRAM_BOT_TOKEN);
     setField('TELEGRAM_CHAT_ID',         cfg.TELEGRAM_CHAT_ID);
     setField('NOVA_WORKFLOWS',           cfg.NOVA_WORKFLOWS);
+    setField('PROFILE_NAME',             cfg.PROFILE_NAME);
+    setField('PROFILE_BACKGROUND',       cfg.PROFILE_BACKGROUND);
+    setField('PROFILE_STYLE',            cfg.PROFILE_STYLE);
 
     // Mirror the Ollama host into the disabled embed-host field
     const embedHost = document.getElementById('cfg-OLLAMA_HOST_EMBED');
@@ -1230,6 +1295,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     'SUPABASE_SERVICE_ROLE_KEY','NOVA_WORKSPACE_PATH','GOOGLE_CREDENTIALS_PATH',
     'NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY',
     'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','NOVA_WORKFLOWS',
+    'PROFILE_NAME','PROFILE_BACKGROUND','PROFILE_STYLE',
   ];
   const body = {};
   for (const f of fields) {

@@ -42,8 +42,8 @@
         <span class="nav-label">Status</span>
       </div>
       <div class="nav-item" data-panel="tasks">
-        <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 4H14l-3.5 2.5 1.5 4L8 10l-4 2.5 1.5-4L2 6h4.5L8 2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-        <span class="nav-label">Tasks</span>
+        <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.5V8l2 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="nav-label">Routines</span>
       </div>
       <div class="nav-item" data-panel="workspace">
         <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 5h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" stroke="currentColor" stroke-width="1.4"/><path d="M2 5l2-3h4l2 3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
@@ -280,6 +280,29 @@
           </div>
         </div>
 
+        <div class="status-section-label">AI Configuration</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Active provider</div>
+            <div class="stat-value" id="stat-provider-large">—</div>
+            <div class="stat-sub" id="stat-provider-status">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Default model</div>
+            <div class="stat-value" id="stat-model-large" style="font-size:14px">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Embeddings</div>
+            <div class="stat-value" id="stat-embed-model" style="font-size:14px">—</div>
+            <div class="stat-sub">via Ollama</div>
+          </div>
+        </div>
+
+        <div class="status-section-label">Connections</div>
+        <div class="stat-grid" id="status-integrations">
+          <!-- Populated by JS — one card per integration with status -->
+        </div>
+
         <div class="status-section-label">Workspace</div>
         <div class="stat-card stat-card-path">
           <div class="stat-label">Path</div>
@@ -295,21 +318,43 @@
         <h2>Memory</h2>
         <button id="refresh-memories-btn" class="btn btn-sm" type="button">Refresh</button>
       </div>
-      <div class="search-bar">
-        <input id="memory-search" type="search" placeholder="Search memories…" autocomplete="off">
-      </div>
-      <div id="memory-list" class="memory-list">
-        <div class="empty-state">Loading…</div>
+      <div class="memory-body">
+        <div class="memory-explainer">
+          <div class="settings-explainer-title">🧠 What lives here?</div>
+          <p>NOVA's memory is the persistent knowledge it builds about you across all conversations. Each memory is a fact NOVA learned, categorized, and embedded for semantic search. Memories surface automatically in relevant chats.</p>
+        </div>
+
+        <div class="memory-stats" id="memory-stats">
+          <div class="memory-stat-card"><div class="memory-stat-value" id="mem-total">—</div><div class="memory-stat-label">Total memories</div></div>
+          <div class="memory-stat-card"><div class="memory-stat-value" id="mem-personal">—</div><div class="memory-stat-label">Personal</div></div>
+          <div class="memory-stat-card"><div class="memory-stat-value" id="mem-preferences">—</div><div class="memory-stat-label">Preferences</div></div>
+          <div class="memory-stat-card"><div class="memory-stat-value" id="mem-projects">—</div><div class="memory-stat-label">Projects</div></div>
+        </div>
+
+        <div class="memory-search-bar">
+          <input id="memory-search" type="text" placeholder="Search memories…" autocomplete="off">
+        </div>
+
+        <div id="memory-list" class="memory-list">
+          <div class="conv-placeholder">Loading…</div>
+        </div>
       </div>
     </div>
 
-    <!-- ── TASKS PANEL ─────────────────────────────────────────────────────── -->
+    <!-- ── ROUTINES PANEL (formerly Tasks) ────────────────────────────────── -->
     <div id="panel-tasks" class="panel">
       <div class="panel-header">
-        <h2>Tasks</h2>
+        <h2>Routines</h2>
         <div style="display:flex;gap:8px">
           <button id="refresh-tasks-btn" class="btn btn-sm" type="button">Refresh</button>
-          <button id="new-task-btn" class="btn btn-sm btn-primary" type="button">+ New Task</button>
+          <button id="new-task-btn" class="btn btn-sm btn-primary" type="button">+ New Routine</button>
+        </div>
+      </div>
+      <div style="padding: 16px 24px 0">
+        <div class="memory-explainer">
+          <div class="settings-explainer-title">⏰ What are routines?</div>
+          <p>Routines are scheduled or triggered actions NOVA performs automatically. Examples: a morning briefing at 8am, a weekly memory consolidation on Sundays, or a price check on a watched product. Routines can run on a schedule, on a trigger event, or on demand.</p>
+          <p style="margin-top:8px"><em>Coming soon:</em> create custom routines from chat ("at 9am every weekday, summarize my Gmail inbox").</p>
         </div>
       </div>
       <div id="tasks-list" class="tasks-list">
@@ -345,35 +390,71 @@
       </div>
     </div>
 
-    <!-- ── WORKSPACE PANEL ────────────────────────────────────────────────── -->
+    <!-- ── PROJECTS PANEL (formerly Workspace) ─────────────────────────────── -->
     <div id="panel-workspace" class="panel">
       <div class="panel-header">
-        <h2>Workspace</h2>
-        <button id="new-skill-btn" class="btn btn-sm" type="button">+ New Skill</button>
+        <h2>Projects</h2>
+        <button id="new-project-btn" class="btn btn-primary" type="button">+ New project</button>
       </div>
-      <div class="workspace-layout">
-        <!-- File tree -->
-        <div id="file-tree" class="file-tree"></div>
 
-        <!-- Editor area -->
-        <div class="editor-area">
-          <!-- Shown when no file is selected -->
-          <div id="editor-placeholder" class="editor-placeholder">
-            Select a file from the tree to edit
-          </div>
+      <!-- Project list view -->
+      <div id="projects-list-view" class="projects-body">
+        <div id="projects-empty" class="projects-empty hidden">
+          <div class="projects-empty-icon">📁</div>
+          <div class="projects-empty-title">No projects yet</div>
+          <div class="projects-empty-desc">Projects keep related chats and context together. Each project has its own instructions and shared knowledge.</div>
+          <button class="btn btn-primary" id="projects-empty-create-btn" type="button">Create your first project</button>
+        </div>
+        <div id="projects-grid" class="projects-grid"></div>
+      </div>
 
-          <!-- Shown when a file is open (JS toggles display: flex) -->
-          <div id="editor-main">
-            <div class="editor-topbar">
-              <span id="editor-filename" class="editor-filename"></span>
-              <div class="editor-actions">
-                <button id="discard-btn" class="btn btn-sm" type="button">Discard</button>
-                <button id="save-btn"    class="btn btn-sm btn-primary" type="button">Save</button>
-              </div>
-            </div>
-            <textarea id="file-content" spellcheck="false"></textarea>
-            <div id="editor-status" class="editor-status"></div>
+      <!-- Project detail view -->
+      <div id="project-detail-view" class="projects-body hidden">
+        <button class="btn btn-sm" id="project-back-btn" type="button" style="margin-bottom:16px">← Back to projects</button>
+        <div class="project-detail-header">
+          <input id="project-detail-name" class="project-detail-name" type="text" placeholder="Project name">
+          <div class="project-detail-actions">
+            <button class="btn btn-sm" id="project-save-btn" type="button">Save</button>
+            <button class="btn btn-sm btn-danger" id="project-delete-btn" type="button">Delete</button>
           </div>
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <textarea id="project-detail-desc" rows="2" placeholder="What's this project about?"></textarea>
+        </div>
+        <div class="field">
+          <label>Custom instructions <span style="color:var(--dimmer);font-weight:normal">(optional)</span></label>
+          <textarea id="project-detail-instructions" rows="4" placeholder="How should NOVA respond when chatting in this project? E.g., 'Always respond in formal tone, focus on legal accuracy.'"></textarea>
+          <div class="hint">Applied to every chat inside this project.</div>
+        </div>
+        <div class="project-chats-section">
+          <div class="project-chats-header">
+            <span>Chats in this project</span>
+            <button class="btn btn-sm btn-primary" id="project-new-chat-btn" type="button">+ New chat</button>
+          </div>
+          <div id="project-chats-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create project modal -->
+    <div id="create-project-modal" class="connect-modal hidden">
+      <div class="connect-modal-card">
+        <div class="connect-modal-header">
+          <div class="connect-modal-title">New project</div>
+          <button class="sb-icon-btn" id="create-project-close" type="button">✕</button>
+        </div>
+        <div class="field">
+          <label>Project name</label>
+          <input id="create-project-name" type="text" placeholder="e.g., Tax filings, Marketing campaign">
+        </div>
+        <div class="field">
+          <label>Description <span style="color:var(--dimmer);font-weight:normal">(optional)</span></label>
+          <textarea id="create-project-desc" rows="2" placeholder="What's this project about?"></textarea>
+        </div>
+        <div class="connect-modal-actions">
+          <button class="btn" id="create-project-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="create-project-confirm" type="button">Create</button>
         </div>
       </div>
     </div>
@@ -391,6 +472,7 @@
         <button class="stab" data-stab="database">Database</button>
         <button class="stab" data-stab="workspace">Workspace</button>
         <button class="stab" data-stab="integrations">Integrations</button>
+        <button class="stab" data-stab="profile">Profile</button>
       </div>
 
       <!-- Tab: AI -->
@@ -641,6 +723,35 @@
         </div>
       </div>
 
+      <!-- Tab: Profile -->
+      <div id="stab-profile" class="settings-tab-body" style="display:none">
+        <div class="settings-explainer">
+          <div class="settings-explainer-title">👤 Profile preferences</div>
+          <p>How NOVA should respond to you. These preferences apply to every conversation, layered with project-specific instructions where relevant.</p>
+        </div>
+
+        <div class="field">
+          <label for="cfg-PROFILE_NAME">Your name</label>
+          <input id="cfg-PROFILE_NAME" type="text" placeholder="Jimmy">
+        </div>
+        <div class="field">
+          <label for="cfg-PROFILE_BACKGROUND">Your background</label>
+          <textarea id="cfg-PROFILE_BACKGROUND" rows="3" placeholder="What you do, what you're working on, what you care about. NOVA uses this to tailor responses."></textarea>
+          <div class="hint">Example: "I'm a software engineer focused on AI tools. I prefer concise, technical explanations."</div>
+        </div>
+        <div class="field">
+          <label for="cfg-PROFILE_STYLE">Response style</label>
+          <select id="cfg-PROFILE_STYLE">
+            <option value="balanced">Balanced (default)</option>
+            <option value="concise">Concise — short, direct answers</option>
+            <option value="detailed">Detailed — thorough explanations</option>
+            <option value="casual">Casual — friendly, informal</option>
+            <option value="formal">Formal — professional, structured</option>
+          </select>
+          <div class="hint">Sets the default tone for NOVA's replies. Override per-project as needed.</div>
+        </div>
+      </div>
+
       <!-- Connect modal (popup) -->
       <div id="connect-modal" class="connect-modal hidden">
         <div class="connect-modal-card">
@@ -719,7 +830,7 @@
   </button>
   <button class="user-menu-item" id="um-workspace">
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 5h11v7a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" stroke="currentColor" stroke-width="1.3"/><path d="M2 5l2-3h4l2 3" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-    <span>Workspace</span>
+    <span>Projects</span>
   </button>
 
   <div class="user-menu-divider"></div>

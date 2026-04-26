@@ -40,6 +40,11 @@ const ConfigSchema = z.object({
 
   // Phase 3 — server options
   NOVA_WORKFLOWS: z.enum(['on', 'off']).default('on'),
+
+  // User profile (Customize → Profile)
+  PROFILE_NAME: z.string().default(''),
+  PROFILE_BACKGROUND: z.string().default(''),
+  PROFILE_STYLE: z.string().default('balanced'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

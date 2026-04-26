@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -245,6 +245,28 @@ export class SupabaseProvider implements DatabaseProvider {
 
   async insertHook(_params: InsertHookParams): Promise<string> {
     throw new Error('insertHook: not implemented for Supabase');
+  }
+
+  async listProjects(_userId: string): Promise<ProjectWithStats[]> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async getProject(_id: string): Promise<Project | null> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async createProject(_userId: string, _name: string, _description?: string, _instructions?: string): Promise<string> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async updateProject(_id: string, _updates: { name?: string; description?: string; instructions?: string }): Promise<void> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async deleteProject(_id: string): Promise<void> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async listProjectConversations(_projectId: string): Promise<Array<{ id: string; started_at: string; ended_at: string | null; first_message: string | null }>> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async linkConversationToProject(_conversationId: string, _projectId: string | null): Promise<void> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
   }
 
   async runMigrations(): Promise<void> {
