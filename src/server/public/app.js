@@ -414,15 +414,18 @@ document.getElementById('model-btn').addEventListener('click', toggleModelMenu);
 // Close menus when clicking outside
 document.addEventListener('click', () => { closePlusMenu(); closeModelMenu(); });
 
+let modelProvider = 'ollama';
+
 async function loadModels() {
   try {
     const data = await apiFetch('/api/models');
     installedModels = data.models || [];
     activeModel = data.current || '';
+    modelProvider = data.provider || 'ollama';
     updateModelLabel(activeModel);
     renderModelMenu();
   } catch {
-    document.getElementById('model-btn-label').textContent = 'models';
+    document.getElementById('model-btn-label').textContent = 'model';
   }
 }
 
@@ -432,21 +435,39 @@ function fmtSize(bytes) {
   return gb >= 1 ? gb.toFixed(1) + ' GB' : (bytes / 1e6).toFixed(0) + ' MB';
 }
 
+function shortModelName(id) {
+  // openrouter: "meta-llama/llama-3.3-70b-instruct:free" → "llama-3.3-70b"
+  // ollama: "gemma3:4b" → "gemma3:4b"
+  if (id.includes('/')) {
+    return id.split('/').pop().replace(/:free$/, '').replace(/-instruct$/, '');
+  }
+  return id.replace(/:latest$/, '');
+}
+
 function renderModelMenu() {
   if (!installedModels.length) {
     modelMenu.innerHTML = '<div class="popover-section-label">No models found</div>';
     return;
   }
+
+  const label = modelProvider === 'openrouter' ? 'Free models · OpenRouter' : 'Installed models · Ollama';
+
   modelMenu.innerHTML = `
-    <div class="popover-section-label">Installed models</div>
-    ${installedModels.map(m => `
-      <button class="popover-item${m.name === activeModel ? ' active' : ''}" data-model="${escapeHtml(m.name)}">
-        <span class="popover-icon">🤖</span>
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(m.name)}</span>
-        <span class="popover-item-sub">${fmtSize(m.size)}</span>
-      </button>
-    `).join('')}
+    <div class="popover-section-label">${label}</div>
+    ${installedModels.map(m => {
+      const isActive = m.name === activeModel;
+      const displayName = m.label && m.label !== m.name ? m.label : shortModelName(m.name);
+      const sub = m.size ? fmtSize(m.size) : (m.name.endsWith(':free') ? 'free' : '');
+      return `
+        <button class="popover-item${isActive ? ' active' : ''}" data-model="${escapeHtml(m.name)}" title="${escapeHtml(m.name)}">
+          <span class="popover-icon">${isActive ? '✓' : '🤖'}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(displayName)}</span>
+          ${sub ? `<span class="popover-item-sub">${escapeHtml(sub)}</span>` : ''}
+        </button>
+      `;
+    }).join('')}
   `;
+
   modelMenu.querySelectorAll('.popover-item[data-model]').forEach(btn => {
     btn.addEventListener('click', () => {
       const model = btn.dataset.model;
@@ -462,8 +483,7 @@ function renderModelMenu() {
 }
 
 function updateModelLabel(model) {
-  const short = model.replace(/:latest$/, '');
-  document.getElementById('model-btn-label').textContent = short || 'model';
+  document.getElementById('model-btn-label').textContent = shortModelName(model) || 'model';
 }
 
 // ── WORKSPACE PANEL ───────────────────────────────────────────────────────────

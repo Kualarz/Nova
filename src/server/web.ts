@@ -219,11 +219,27 @@ export function startWebServer(port = 3000): void {
   app.get('/api/models', async (_req, res) => {
     try {
       const config = getConfig();
+
+      if (config.MODEL_PROVIDER === 'openrouter') {
+        // Fetch live model list from OpenRouter and filter to free models
+        const resp = await fetch('https://openrouter.ai/api/v1/models', {
+          headers: { Authorization: `Bearer ${config.OPENROUTER_API_KEY}` },
+        });
+        if (!resp.ok) return res.status(502).json({ error: 'OpenRouter unreachable' });
+        const data = (await resp.json()) as { data: Array<{ id: string; name: string; pricing?: { prompt: string } }> };
+        const models = (data.data ?? [])
+          .filter(m => m.id.endsWith(':free') || m.pricing?.prompt === '0')
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map(m => ({ name: m.id, label: m.name, size: 0 }));
+        return res.json({ models, current: config.DEFAULT_MODEL, provider: 'openrouter' });
+      }
+
+      // Ollama
       const resp = await fetch(`${config.OLLAMA_HOST}/api/tags`);
       if (!resp.ok) return res.status(502).json({ error: 'Ollama unreachable' });
       const data = (await resp.json()) as { models: Array<{ name: string; size: number }> };
-      const models = (data.models ?? []).map(m => ({ name: m.name, size: m.size }));
-      res.json({ models, current: config.DEFAULT_MODEL });
+      const models = (data.models ?? []).map(m => ({ name: m.name, label: m.name, size: m.size }));
+      res.json({ models, current: config.DEFAULT_MODEL, provider: 'ollama' });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
