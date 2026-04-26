@@ -25,11 +25,29 @@ function switchPanel(name) {
   if (name === 'tasks')     loadTasks();
   if (name === 'workspace') loadProjectsList();
   if (name === 'settings')  loadSettings();
+  if (name === 'customize') loadCustomize();
+  if (name === 'chat')      updateWelcomeGreeting();
+}
+
+function openSearchModal() {
+  // Reuses the sidebar search bar — toggle it open and focus
+  searchVisible = true;
+  const wrap = document.getElementById('sb-search-wrap');
+  if (wrap) {
+    wrap.classList.remove('hidden');
+    const input = document.getElementById('sb-search-input');
+    if (input) setTimeout(() => input.focus(), 50);
+  }
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
-    if (item.dataset.panel === 'chat') {
+    const target = item.dataset.panel;
+    if (target === 'search') {
+      openSearchModal();
+      return;
+    }
+    if (target === 'chat') {
       // "New chat" — clear messages and reconnect
       document.getElementById('chat-messages').innerHTML = '';
       _hasMessages = false;
@@ -37,9 +55,31 @@ document.querySelectorAll('.nav-item').forEach(item => {
       if (typeof clearAttachments === 'function') clearAttachments();
       if (ws) ws.close();
     }
-    switchPanel(item.dataset.panel);
+    switchPanel(target);
   });
 });
+
+// Re-bind dynamically-added nav items (inside More expander)
+function rebindNavItems() {
+  document.querySelectorAll('.sb-more-items .nav-item').forEach(item => {
+    if (item.dataset.bound) return;
+    item.dataset.bound = '1';
+    item.addEventListener('click', () => {
+      switchPanel(item.dataset.panel);
+    });
+  });
+}
+rebindNavItems();
+
+// More expander toggle
+const moreToggle = document.getElementById('sb-more-toggle');
+if (moreToggle) {
+  moreToggle.addEventListener('click', () => {
+    const items = document.getElementById('sb-more-items');
+    items.classList.toggle('hidden');
+    moreToggle.classList.toggle('expanded');
+  });
+}
 
 // ── Sidebar collapse ──────────────────────────────────────────────────────────
 document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
@@ -252,18 +292,10 @@ function openConvMenu(itemEl, id) {
   const menu = document.createElement('div');
   menu.className = 'conv-menu';
   menu.innerHTML = `
-    <button class="conv-menu-item" data-action="pin">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8 1.5L11 4.5L6.5 9L2 7.5L5 4.5L8 1.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.5 9L5 11.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-      ${pinned ? 'Unpin' : 'Pin'}
-    </button>
-    <button class="conv-menu-item" data-action="rename">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 2L11 4.5L4.5 11H2V8.5L8.5 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-      Rename
-    </button>
-    <button class="conv-menu-item danger" data-action="delete">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 3.5h8M4.5 3.5V2h4v1.5M5.5 6v4M7.5 6v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><rect x="2" y="3.5" width="9" height="7" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>
-      Delete
-    </button>
+    <button class="conv-menu-item" data-action="pin">⭐ ${pinned ? 'Unstar' : 'Star'}</button>
+    <button class="conv-menu-item" data-action="rename">✏️ Rename</button>
+    <button class="conv-menu-item" data-action="move">📁 Move to project</button>
+    <button class="conv-menu-item danger" data-action="delete">🗑 Delete</button>
   `;
 
   menu.style.position = 'fixed';
@@ -304,6 +336,39 @@ function openConvMenu(itemEl, id) {
       alert('Delete failed: ' + e.message);
     }
   });
+  const moveBtn = menu.querySelector('[data-action="move"]');
+  if (moveBtn) {
+    moveBtn.addEventListener('click', async () => {
+      closeConvMenu();
+      try {
+        const projects = await apiFetch('/api/projects');
+        if (!projects.length) {
+          if (confirm('No projects yet. Create one?')) {
+            switchPanel('workspace');
+          }
+          return;
+        }
+        const list = projects.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
+        const choice = prompt(`Move to which project?\n\n${list}\n\n(Enter number, or empty to unlink)`, '');
+        if (choice === null) return;
+        const trimmed = choice.trim();
+        let projectId = null;
+        if (trimmed) {
+          const idx = parseInt(trimmed, 10) - 1;
+          if (Number.isNaN(idx) || !projects[idx]) { alert('Invalid choice'); return; }
+          projectId = projects[idx].id;
+        }
+        await apiFetch('/api/conversations/' + encodeURIComponent(id) + '/project', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId }),
+        });
+        await loadConversations();
+      } catch (e) {
+        alert('Move failed: ' + e.message);
+      }
+    });
+  }
 }
 
 document.addEventListener('click', () => closeConvMenu());
@@ -413,8 +478,48 @@ let _hasMessages = false;
 function setWelcome(show) {
   const el = document.getElementById('chat-welcome');
   if (!el) return;
-  if (show) el.classList.remove('hidden');
-  else      el.classList.add('hidden');
+  if (show) {
+    el.classList.remove('hidden');
+    updateWelcomeGreeting();
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function updateWelcomeGreeting() {
+  const greetEl = document.getElementById('welcome-greeting');
+  const chipsEl = document.getElementById('welcome-chips');
+  if (!greetEl || !chipsEl) return;
+  const name = (window.userPreferredName || 'Jimmy');
+  const h = new Date().getHours();
+  let greeting;
+  if (h >= 5 && h < 12)        greeting = `Good morning, ${name}`;
+  else if (h >= 12 && h < 17)  greeting = `Good afternoon, ${name}`;
+  else if (h >= 17 && h < 21)  greeting = `Good evening, ${name}`;
+  else                          greeting = `Hello, night owl`;
+  greetEl.textContent = greeting;
+
+  const allChips = [
+    { icon: '</>', label: 'Code' },
+    { icon: '📊', label: 'Strategize' },
+    { icon: '🎓', label: 'Learn' },
+    { icon: '✏️', label: 'Write' },
+    { icon: '📧', label: 'From Gmail' },
+    { icon: '🔍', label: 'Research' },
+    { icon: '📅', label: 'Plan my day' },
+    { icon: '📝', label: 'Summarize' },
+  ];
+  const shuffled = [...allChips].sort(() => Math.random() - 0.5).slice(0, 5);
+  chipsEl.innerHTML = shuffled.map(c =>
+    `<button class="welcome-chip" data-prompt="${escapeHtml(c.label)}">${c.icon} ${escapeHtml(c.label)}</button>`
+  ).join('');
+  chipsEl.querySelectorAll('.welcome-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ci = document.getElementById('chat-input');
+      ci.value = btn.dataset.prompt + ': ';
+      ci.focus();
+    });
+  });
 }
 
 // ── CHAT — message rendering ──────────────────────────────────────────────────
@@ -791,46 +896,94 @@ function shortModelName(id) {
   return id.replace(/:latest$/, '');
 }
 
+function describeModel(name) {
+  const lower = (name || '').toLowerCase();
+  if (lower.includes('opus') || lower.includes('70b') || lower.includes('large')) return 'Most capable for ambitious work';
+  if (lower.includes('haiku') || lower.includes('8b') || lower.includes('mini') || lower.includes('instant')) return 'Fastest for quick answers';
+  return 'Most efficient for everyday tasks';
+}
+
 function renderModelMenu() {
   if (!installedModels.length) {
     modelMenu.innerHTML = '<div class="popover-section-label">No models found</div>';
     return;
   }
 
-  const label = modelProvider === 'openrouter' ? 'Free models · OpenRouter' : 'Installed models · Ollama';
+  const primary = installedModels.slice(0, 3);
+  const more    = installedModels.slice(3);
 
-  modelMenu.innerHTML = `
-    <div class="popover-section-label">${label}</div>
-    ${installedModels.map(m => {
-      const isActive = m.name === activeModel;
-      const displayName = m.label && m.label !== m.name ? m.label : shortModelName(m.name);
-      const sub = m.size ? fmtSize(m.size) : (m.name.endsWith(':free') ? 'free' : '');
-      return `
-        <button class="popover-item${isActive ? ' active' : ''}" data-model="${escapeHtml(m.name)}" title="${escapeHtml(m.name)}">
-          <span class="popover-icon">${isActive ? '✓' : '🤖'}</span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(displayName)}</span>
-          ${sub ? `<span class="popover-item-sub">${escapeHtml(sub)}</span>` : ''}
-        </button>
-      `;
-    }).join('')}
+  const primaryHtml = primary.map(m => {
+    const display = m.label || shortModelName(m.name);
+    const desc = describeModel(m.name);
+    const isActive = m.name === activeModel;
+    return `
+      <button class="model-option${isActive ? ' active' : ''}" data-model="${escapeHtml(m.name)}">
+        <div class="model-option-name">${escapeHtml(display)}${isActive ? ' <span class="model-checkmark">✓</span>' : ''}</div>
+        <div class="model-option-desc">${escapeHtml(desc)}</div>
+      </button>
+    `;
+  }).join('');
+
+  const adaptiveOn = localStorage.getItem('nova:adaptive-thinking') !== 'off';
+  const adaptiveHtml = `
+    <div class="model-divider"></div>
+    <button class="model-option" id="adaptive-thinking-toggle">
+      <div class="model-option-name">Adaptive thinking <span class="model-toggle ${adaptiveOn ? 'on' : ''}"></span></div>
+      <div class="model-option-desc">Thinks for more complex tasks</div>
+    </button>
   `;
 
-  modelMenu.querySelectorAll('.popover-item[data-model]').forEach(btn => {
-    btn.addEventListener('click', () => {
+  const moreHtml = more.length ? `
+    <div class="model-divider"></div>
+    <button class="model-option" id="model-more-toggle">
+      <div class="model-option-name">More models <span style="float:right">▸</span></div>
+    </button>
+    <div class="model-more-submenu" id="model-more-submenu" style="display:none">
+      ${more.map(m => `<button class="model-option-sub" data-model="${escapeHtml(m.name)}">${escapeHtml(shortModelName(m.name))}</button>`).join('')}
+    </div>
+  ` : '';
+
+  modelMenu.innerHTML = primaryHtml + adaptiveHtml + moreHtml;
+
+  modelMenu.querySelectorAll('[data-model]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
       const model = btn.dataset.model;
       activeModel = model;
       updateModelLabel(model);
       renderModelMenu();
       closeModelMenu();
-      if (ws && wsReady) {
-        ws.send(JSON.stringify({ type: 'set_model', model }));
-      }
+      if (ws && wsReady) ws.send(JSON.stringify({ type: 'set_model', model }));
     });
   });
+
+  const adaptiveBtn = document.getElementById('adaptive-thinking-toggle');
+  if (adaptiveBtn) {
+    adaptiveBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const cur = localStorage.getItem('nova:adaptive-thinking') !== 'off';
+      localStorage.setItem('nova:adaptive-thinking', cur ? 'off' : 'on');
+      renderModelMenu();
+      updateModelLabel(activeModel);
+    });
+  }
+
+  const moreBtn = document.getElementById('model-more-toggle');
+  if (moreBtn) {
+    moreBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const sub = document.getElementById('model-more-submenu');
+      if (sub) sub.style.display = sub.style.display === 'none' ? 'block' : 'none';
+    });
+  }
 }
 
 function updateModelLabel(model) {
-  document.getElementById('model-btn-label').textContent = shortModelName(model) || 'model';
+  const adaptiveOn = localStorage.getItem('nova:adaptive-thinking') !== 'off';
+  const label = shortModelName(model) || 'model';
+  const adaptiveSpan = adaptiveOn ? ' <span class="adaptive-label">Adaptive</span>' : '';
+  const el = document.getElementById('model-btn-label');
+  if (el) el.innerHTML = escapeHtml(label) + adaptiveSpan;
 }
 
 // ── PROJECTS PANEL ────────────────────────────────────────────────────────────
@@ -841,6 +994,8 @@ async function loadProjectsList() {
   const empty = document.getElementById('projects-empty');
   document.getElementById('projects-list-view').classList.remove('hidden');
   document.getElementById('project-detail-view').classList.add('hidden');
+  const createView = document.getElementById('project-create-view');
+  if (createView) createView.classList.add('hidden');
 
   try {
     const projects = await apiFetch('/api/projects');
@@ -881,14 +1036,29 @@ function renderProjectDetail() {
   const p = _currentProject;
   if (!p) return;
   document.getElementById('projects-list-view').classList.add('hidden');
+  document.getElementById('project-create-view')?.classList.add('hidden');
   document.getElementById('project-detail-view').classList.remove('hidden');
-  document.getElementById('project-detail-name').value         = p.name || '';
-  document.getElementById('project-detail-desc').value         = p.description || '';
-  document.getElementById('project-detail-instructions').value = p.instructions || '';
+
+  const nameEl = document.getElementById('project-detail-name-display');
+  const descEl = document.getElementById('project-detail-desc-display');
+  if (nameEl) nameEl.textContent = p.name || 'Untitled project';
+  if (descEl) descEl.textContent = p.description || '';
+
+  // Show/hide "Show more" depending on description length
+  const showMore = document.getElementById('project-show-more');
+  if (showMore) showMore.style.display = (p.description && p.description.length > 200) ? 'block' : 'none';
+
+  // Instructions card body
+  const instBody = document.getElementById('rail-instructions-body');
+  if (instBody) {
+    instBody.textContent = p.instructions
+      ? p.instructions.slice(0, 120) + (p.instructions.length > 120 ? '…' : '')
+      : "Add instructions to tailor NOVA's responses";
+  }
 
   const list = document.getElementById('project-chats-list');
   if (!p.conversations || !p.conversations.length) {
-    list.innerHTML = '<div class="project-chats-empty">No chats yet. Start one with the button above.</div>';
+    list.innerHTML = '<div class="project-chats-empty" style="padding:24px;text-align:center;font-size:12.5px;color:var(--dimmer)">No chats yet. Use the input above to start one.</div>';
     return;
   }
   list.innerHTML = p.conversations.map(c => {
@@ -902,17 +1072,73 @@ function renderProjectDetail() {
   }).join('');
 }
 
-document.getElementById('project-back-btn').addEventListener('click', () => {
+// Back button
+document.getElementById('project-back-btn')?.addEventListener('click', () => {
   _currentProject = null;
   loadProjectsList();
 });
 
-document.getElementById('project-save-btn').addEventListener('click', async () => {
+// Show more toggle
+document.getElementById('project-show-more')?.addEventListener('click', () => {
+  const desc = document.getElementById('project-detail-desc-display');
+  const btn = document.getElementById('project-show-more');
+  if (!desc || !btn) return;
+  desc.classList.toggle('expanded');
+  btn.textContent = desc.classList.contains('expanded') ? 'Show less' : 'Show more';
+});
+
+// 3-dot menu
+document.getElementById('project-3dot-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('project-3dot-menu')?.classList.toggle('hidden');
+});
+document.addEventListener('click', () => {
+  document.getElementById('project-3dot-menu')?.classList.add('hidden');
+});
+
+// 3-dot actions
+document.querySelectorAll('#project-3dot-menu .project-3dot-item').forEach(btn => {
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    document.getElementById('project-3dot-menu')?.classList.add('hidden');
+    const action = btn.dataset.action;
+    if (!_currentProject) return;
+    if (action === 'edit') {
+      document.getElementById('project-edit-name').value = _currentProject.name || '';
+      document.getElementById('project-edit-desc').value = _currentProject.description || '';
+      document.getElementById('project-edit-modal').classList.remove('hidden');
+    } else if (action === 'archive') {
+      if (confirm('Archive this project? (Behaves like delete for now — no archive API yet.)')) {
+        try {
+          await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), { method: 'DELETE' });
+          _currentProject = null;
+          loadProjectsList();
+        } catch (err) { alert('Archive failed: ' + err.message); }
+      }
+    } else if (action === 'delete') {
+      if (confirm(`Delete project "${_currentProject.name}"? Chats inside will remain but become unlinked.`)) {
+        try {
+          await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), { method: 'DELETE' });
+          _currentProject = null;
+          loadProjectsList();
+        } catch (err) { alert('Delete failed: ' + err.message); }
+      }
+    }
+  });
+});
+
+// Edit details modal
+document.getElementById('project-edit-close')?.addEventListener('click', () => {
+  document.getElementById('project-edit-modal').classList.add('hidden');
+});
+document.getElementById('project-edit-cancel')?.addEventListener('click', () => {
+  document.getElementById('project-edit-modal').classList.add('hidden');
+});
+document.getElementById('project-edit-save')?.addEventListener('click', async () => {
   if (!_currentProject) return;
   const updates = {
-    name: document.getElementById('project-detail-name').value.trim(),
-    description: document.getElementById('project-detail-desc').value.trim(),
-    instructions: document.getElementById('project-detail-instructions').value.trim(),
+    name: document.getElementById('project-edit-name').value.trim(),
+    description: document.getElementById('project-edit-desc').value.trim(),
   };
   try {
     await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), {
@@ -920,54 +1146,79 @@ document.getElementById('project-save-btn').addEventListener('click', async () =
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    // refetch with conversations
     _currentProject = await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id));
-    alert('Saved');
+    document.getElementById('project-edit-modal').classList.add('hidden');
+    renderProjectDetail();
   } catch (e) { alert('Save failed: ' + e.message); }
 });
 
-document.getElementById('project-delete-btn').addEventListener('click', async () => {
+// Instructions modal — open via card click or + button
+function openInstructionsModal() {
   if (!_currentProject) return;
-  if (!confirm(`Delete project "${_currentProject.name}"? Chats inside will remain but become unlinked.`)) return;
+  document.getElementById('project-instructions-textarea').value = _currentProject.instructions || '';
+  document.getElementById('project-instructions-modal').classList.remove('hidden');
+}
+document.getElementById('rail-instructions-card')?.addEventListener('click', openInstructionsModal);
+document.getElementById('rail-instructions-add')?.addEventListener('click', e => { e.stopPropagation(); openInstructionsModal(); });
+document.getElementById('project-instructions-close')?.addEventListener('click', () => {
+  document.getElementById('project-instructions-modal').classList.add('hidden');
+});
+document.getElementById('project-instructions-cancel')?.addEventListener('click', () => {
+  document.getElementById('project-instructions-modal').classList.add('hidden');
+});
+document.getElementById('project-instructions-save')?.addEventListener('click', async () => {
+  if (!_currentProject) return;
+  const instructions = document.getElementById('project-instructions-textarea').value.trim();
   try {
-    await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), { method: 'DELETE' });
-    _currentProject = null;
-    loadProjectsList();
-  } catch (e) { alert('Delete failed: ' + e.message); }
+    await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instructions }),
+    });
+    _currentProject = await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id));
+    document.getElementById('project-instructions-modal').classList.add('hidden');
+    renderProjectDetail();
+  } catch (e) { alert('Save failed: ' + e.message); }
 });
 
-document.getElementById('project-new-chat-btn').addEventListener('click', () => {
-  if (_currentProject) {
-    sessionStorage.setItem('nova:active-project', _currentProject.id);
-  }
+// Project chat input — pressing Enter opens a new chat with the project active
+document.getElementById('project-chat-send')?.addEventListener('click', () => {
+  if (!_currentProject) return;
+  const text = document.getElementById('project-chat-input').value.trim();
+  sessionStorage.setItem('nova:active-project', _currentProject.id);
   switchPanel('chat');
   document.getElementById('chat-messages').innerHTML = '';
   _hasMessages = false;
   setWelcome(true);
+  if (text) {
+    const ci = document.getElementById('chat-input');
+    if (ci) ci.value = text;
+  }
   if (ws) ws.close();
 });
 
-// Create project modal
-const createProjectModal = document.getElementById('create-project-modal');
+// Create view (Item 3) — full-page replaces modal
 function openCreateProject() {
-  document.getElementById('create-project-name').value = '';
-  document.getElementById('create-project-desc').value = '';
-  createProjectModal.classList.remove('hidden');
-  setTimeout(() => document.getElementById('create-project-name').focus(), 50);
+  document.getElementById('projects-list-view').classList.add('hidden');
+  document.getElementById('project-detail-view').classList.add('hidden');
+  document.getElementById('project-create-view').classList.remove('hidden');
+  document.getElementById('project-create-name').value = '';
+  document.getElementById('project-create-desc').value = '';
+  setTimeout(() => document.getElementById('project-create-name').focus(), 50);
 }
-function closeCreateProject() { createProjectModal.classList.add('hidden'); }
+function closeCreateProject() {
+  document.getElementById('project-create-view').classList.add('hidden');
+  document.getElementById('projects-list-view').classList.remove('hidden');
+}
 
 document.getElementById('new-project-btn').addEventListener('click', openCreateProject);
 document.getElementById('projects-empty-create-btn').addEventListener('click', openCreateProject);
-document.getElementById('create-project-close').addEventListener('click', closeCreateProject);
-document.getElementById('create-project-cancel').addEventListener('click', closeCreateProject);
-createProjectModal.addEventListener('click', e => {
-  if (e.target === createProjectModal) closeCreateProject();
-});
+document.getElementById('project-create-back')?.addEventListener('click', closeCreateProject);
+document.getElementById('project-create-cancel')?.addEventListener('click', closeCreateProject);
 
-document.getElementById('create-project-confirm').addEventListener('click', async () => {
-  const name = document.getElementById('create-project-name').value.trim();
-  const description = document.getElementById('create-project-desc').value.trim();
+document.getElementById('project-create-confirm')?.addEventListener('click', async () => {
+  const name = document.getElementById('project-create-name').value.trim();
+  const description = document.getElementById('project-create-desc').value.trim();
   if (!name) { alert('Name is required'); return; }
   try {
     const project = await apiFetch('/api/projects', {
@@ -975,7 +1226,6 @@ document.getElementById('create-project-confirm').addEventListener('click', asyn
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, description }),
     });
-    closeCreateProject();
     await openProject(project.id);
   } catch (e) { alert('Create failed: ' + e.message); }
 });
@@ -1132,15 +1382,43 @@ document.getElementById('task-topic').addEventListener('keydown', e => {
 });
 
 // ── SETTINGS PANEL ────────────────────────────────────────────────────────────
-// Tab switching
-document.querySelectorAll('.stab').forEach(tab => {
+// Tab switching (new sub-sidebar)
+document.querySelectorAll('.settings-nav-item').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.settings-tab-body').forEach(b => b.style.display = 'none');
+    document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('#panel-settings .settings-tab-body').forEach(b => {
+      b.classList.remove('active');
+      b.style.display = 'none';
+    });
     tab.classList.add('active');
     const body = document.getElementById('stab-' + tab.dataset.stab);
-    if (body) body.style.display = 'block';
+    if (body) {
+      body.classList.add('active');
+      body.style.display = 'block';
+    }
+    if (tab.dataset.stab === 'capabilities') {
+      loadMemoryPreview();
+    }
   });
+});
+
+async function loadMemoryPreview() {
+  try {
+    const mems = await apiFetch('/api/memories');
+    const meta = document.getElementById('memory-preview-meta');
+    const list = document.getElementById('memory-preview-list');
+    if (meta) meta.textContent = `${mems.length} memor${mems.length === 1 ? 'y' : 'ies'}`;
+    if (list) {
+      const top = mems.slice(0, 5);
+      list.innerHTML = top.length
+        ? top.map(m => `<div class="memory-preview-item">${escapeHtml(m.content)}</div>`).join('')
+        : '<div class="memory-preview-item" style="color:var(--dimmer)">No memories yet — chat with NOVA and they\'ll appear here.</div>';
+    }
+  } catch {}
+}
+
+document.getElementById('memory-view-all-btn')?.addEventListener('click', () => {
+  switchPanel('memory');
 });
 
 async function loadSettingsModels(provider, savedDefault, savedComplex) {
@@ -1210,6 +1488,21 @@ async function loadSettings() {
     setField('PROFILE_NAME',             cfg.PROFILE_NAME);
     setField('PROFILE_BACKGROUND',       cfg.PROFILE_BACKGROUND);
     setField('PROFILE_STYLE',            cfg.PROFILE_STYLE);
+    setField('PROFILE_FULL_NAME',        cfg.PROFILE_FULL_NAME);
+    setField('PROFILE_NICKNAME',         cfg.PROFILE_NICKNAME);
+    setField('PROFILE_WORK',             cfg.PROFILE_WORK);
+    setField('PROFILE_PREFERENCES',      cfg.PROFILE_PREFERENCES);
+
+    // Boolean toggles
+    const setCheck = (id, val) => { const el = document.getElementById('cfg-' + id); if (el) el.checked = (String(val) === 'on' || val === true); };
+    setCheck('NOTIFY_COMPLETIONS', cfg.NOTIFY_COMPLETIONS);
+    setCheck('MEMORY_SEARCH',     cfg.MEMORY_SEARCH);
+    setCheck('MEMORY_GENERATE',   cfg.MEMORY_GENERATE);
+    setCheck('ARTIFACTS',         cfg.ARTIFACTS);
+
+    // Expose nickname for welcome greeting
+    window.userPreferredName = cfg.PROFILE_NICKNAME || cfg.PROFILE_NAME || 'Jimmy';
+    if (typeof updateWelcomeGreeting === 'function') updateWelcomeGreeting();
 
     // Mirror the Ollama host into the disabled embed-host field
     const embedHost = document.getElementById('cfg-OLLAMA_HOST_EMBED');
@@ -1296,11 +1589,17 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     'NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY',
     'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','NOVA_WORKFLOWS',
     'PROFILE_NAME','PROFILE_BACKGROUND','PROFILE_STYLE',
+    'PROFILE_FULL_NAME','PROFILE_NICKNAME','PROFILE_WORK','PROFILE_PREFERENCES',
   ];
   const body = {};
   for (const f of fields) {
     const el = document.getElementById('cfg-' + f);
     if (el) body[f] = el.value;
+  }
+  // Boolean toggles → 'on'/'off' strings
+  for (const f of ['NOTIFY_COMPLETIONS','MEMORY_SEARCH','MEMORY_GENERATE','ARTIFACTS']) {
+    const el = document.getElementById('cfg-' + f);
+    if (el && 'checked' in el) body[f] = el.checked ? 'on' : 'off';
   }
   try {
     setSettingsStatus('Saving…');
@@ -1426,7 +1725,234 @@ async function triggerSettingsSave() {
   }
 }
 
+// ── + menu submenus (Item 6) ──────────────────────────────────────────────────
+function openPlusSubmenu(triggerId, submenuId, populateFn) {
+  const trigger = document.getElementById(triggerId);
+  const submenu = document.getElementById(submenuId);
+  if (!trigger || !submenu) return;
+  document.querySelectorAll('.plus-submenu').forEach(s => s.classList.add('hidden'));
+  const rect = trigger.getBoundingClientRect();
+  populateFn();
+  submenu.style.left = (rect.right + 4) + 'px';
+  submenu.style.top  = rect.top + 'px';
+  submenu.classList.remove('hidden');
+}
+
+function closePlusSubmenus() {
+  document.querySelectorAll('.plus-submenu').forEach(s => s.classList.add('hidden'));
+}
+
+document.getElementById('plus-add-to-project')?.addEventListener('click', e => {
+  e.stopPropagation();
+  openPlusSubmenu('plus-add-to-project', 'plus-submenu-projects', async () => {
+    const sm = document.getElementById('plus-submenu-projects');
+    sm.innerHTML = '<div class="popover-section-label">Loading…</div>';
+    try {
+      const projects = await apiFetch('/api/projects');
+      sm.innerHTML = projects.map(p =>
+        `<button class="popover-item" data-project-id="${escapeHtml(p.id)}"><span class="popover-icon">📁</span>${escapeHtml(p.name)}</button>`
+      ).join('') + '<div class="plus-divider"></div><button class="popover-item" id="plus-start-project">+ Start a new project</button>';
+      sm.querySelectorAll('[data-project-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          sessionStorage.setItem('nova:active-project', btn.dataset.projectId);
+          alert('Linked to project (will apply to your next new chat).');
+          closePlusMenu();
+          closePlusSubmenus();
+        });
+      });
+      document.getElementById('plus-start-project')?.addEventListener('click', () => {
+        closePlusMenu();
+        closePlusSubmenus();
+        switchPanel('workspace');
+        document.getElementById('new-project-btn')?.click();
+      });
+    } catch {
+      sm.innerHTML = '<div class="popover-section-label">Failed to load</div>';
+    }
+  });
+});
+
+document.getElementById('plus-skills')?.addEventListener('click', e => {
+  e.stopPropagation();
+  openPlusSubmenu('plus-skills', 'plus-submenu-skills', async () => {
+    const sm = document.getElementById('plus-submenu-skills');
+    sm.innerHTML = '<div class="popover-section-label">Loading…</div>';
+    try {
+      const skills = await apiFetch('/api/skills');
+      sm.innerHTML = (skills.length
+        ? skills.map(s => `<button class="popover-item"><span class="popover-icon">📜</span>${escapeHtml(s.name)}</button>`).join('')
+        : '<div class="popover-section-label">No skills yet</div>'
+      ) + '<div class="plus-divider"></div><button class="popover-item" id="plus-manage-skills">📂 Manage skills</button>';
+      document.getElementById('plus-manage-skills')?.addEventListener('click', () => {
+        closePlusMenu(); closePlusSubmenus();
+        switchPanel('customize');
+        const skillsTab = document.querySelector('.customize-nav-item[data-cstab="skills"]');
+        skillsTab?.click();
+      });
+    } catch {
+      sm.innerHTML = '<div class="popover-section-label">Failed to load</div>';
+    }
+  });
+});
+
+document.getElementById('plus-connectors')?.addEventListener('click', e => {
+  e.stopPropagation();
+  openPlusSubmenu('plus-connectors', 'plus-submenu-connectors', async () => {
+    const sm = document.getElementById('plus-submenu-connectors');
+    try {
+      const cfg = await apiFetch('/api/settings');
+      const connectors = [
+        { key: 'NOTION_API_KEY',          name: 'Notion' },
+        { key: 'WEB_SEARCH_API_KEY',      name: 'Web Search' },
+        { key: 'OPENWEATHER_API_KEY',     name: 'Weather' },
+        { key: 'TELEGRAM_BOT_TOKEN',      name: 'Telegram' },
+        { key: 'GOOGLE_CREDENTIALS_PATH', name: 'Google' },
+      ];
+      sm.innerHTML = connectors.map(c => {
+        const connected = cfg[c.key] && String(cfg[c.key]).length > 0;
+        return `<button class="popover-item"><span class="popover-icon">${connected ? '🟢' : '⚫'}</span>${escapeHtml(c.name)}</button>`;
+      }).join('') + '<div class="plus-divider"></div><button class="popover-item" id="plus-manage-connectors">📂 Manage connectors</button>';
+      document.getElementById('plus-manage-connectors')?.addEventListener('click', () => {
+        closePlusMenu(); closePlusSubmenus();
+        switchPanel('customize');
+        document.querySelector('.customize-nav-item[data-cstab="connectors"]')?.click();
+      });
+    } catch {}
+  });
+});
+
+document.getElementById('plus-use-style')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const trigger = document.getElementById('plus-use-style');
+  const submenu = document.getElementById('plus-submenu-styles');
+  document.querySelectorAll('.plus-submenu').forEach(s => s.classList.add('hidden'));
+  const cur = localStorage.getItem('nova:style') || 'normal';
+  submenu.querySelectorAll('.style-option').forEach(o => o.classList.toggle('active', o.dataset.style === cur));
+  const rect = trigger.getBoundingClientRect();
+  submenu.style.left = (rect.right + 4) + 'px';
+  submenu.style.top  = rect.top + 'px';
+  submenu.classList.remove('hidden');
+});
+
+document.querySelectorAll('.style-option').forEach(opt => {
+  opt.addEventListener('click', e => {
+    e.stopPropagation();
+    localStorage.setItem('nova:style', opt.dataset.style);
+    closePlusSubmenus();
+    closePlusMenu();
+  });
+});
+
+// Web search toggle
+const webSearchBtn = document.getElementById('plus-web-search');
+if (webSearchBtn) {
+  // Initialize visual state
+  const cur = localStorage.getItem('nova:web-search') !== 'off';
+  document.getElementById('plus-web-search-mark')?.classList.toggle('off', !cur);
+  webSearchBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOn = localStorage.getItem('nova:web-search') !== 'off';
+    localStorage.setItem('nova:web-search', isOn ? 'off' : 'on');
+    document.getElementById('plus-web-search-mark')?.classList.toggle('off', isOn);
+  });
+}
+
+// Close submenus when outer click
+document.addEventListener('click', () => closePlusSubmenus());
+
+// ── Customize panel (Item 10) ─────────────────────────────────────────────────
+function switchCustomizeTab(name) {
+  document.querySelectorAll('.customize-nav-item').forEach(t => t.classList.toggle('active', t.dataset.cstab === name));
+  document.querySelectorAll('.customize-tab-body').forEach(b => b.style.display = 'none');
+  const body = document.getElementById('customize-' + name);
+  if (body) body.style.display = '';
+  if (name === 'skills') loadCustomizeSkills();
+  if (name === 'connectors') loadCustomizeConnectors();
+}
+
+document.querySelectorAll('.customize-nav-item').forEach(item => {
+  item.addEventListener('click', () => switchCustomizeTab(item.dataset.cstab));
+});
+
+document.querySelectorAll('.customize-action-card').forEach(card => {
+  card.addEventListener('click', () => switchCustomizeTab(card.dataset.cstab));
+});
+
+function loadCustomize() {
+  switchCustomizeTab('landing');
+}
+
+async function loadCustomizeSkills() {
+  const list = document.getElementById('customize-skills-list');
+  if (!list) return;
+  list.innerHTML = '<div class="customize-list-section-label">Loading…</div>';
+  try {
+    const skills = await apiFetch('/api/skills');
+    if (!skills.length) {
+      list.innerHTML = '<div style="padding:10px;color:var(--dimmer);font-size:12px">No skills yet</div>';
+      return;
+    }
+    list.innerHTML = skills.map(s =>
+      `<div class="customize-list-item" data-skill="${escapeHtml(s.path)}">📜 ${escapeHtml(s.name)}</div>`
+    ).join('');
+    list.querySelectorAll('.customize-list-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        list.querySelectorAll('.customize-list-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        const detail = document.getElementById('customize-skill-detail');
+        detail.innerHTML = '<div class="customize-detail-empty">Loading…</div>';
+        try {
+          const data = await apiFetch('/api/workspace/' + item.dataset.skill);
+          detail.innerHTML = `<div class="customize-skill-content">${escapeHtml(data.content)}</div>`;
+        } catch (e) {
+          detail.innerHTML = `<div class="customize-detail-empty" style="color:var(--red)">Failed: ${escapeHtml(e.message)}</div>`;
+        }
+      });
+    });
+  } catch {
+    list.innerHTML = '<div style="padding:10px;color:var(--red);font-size:12px">Failed to load</div>';
+  }
+}
+
+async function loadCustomizeConnectors() {
+  const connectedEl = document.getElementById('customize-connected-list');
+  const disconnectedEl = document.getElementById('customize-disconnected-list');
+  if (!connectedEl || !disconnectedEl) return;
+  try {
+    const cfg = await apiFetch('/api/settings');
+    const connectors = [
+      { key: 'NOTION_API_KEY',          name: 'Notion',          icon: '📓' },
+      { key: 'GOOGLE_CREDENTIALS_PATH', name: 'Google',          icon: '📅' },
+      { key: 'WEB_SEARCH_API_KEY',      name: 'Web Search',      icon: '🔍' },
+      { key: 'OPENWEATHER_API_KEY',     name: 'OpenWeather',     icon: '☀️' },
+      { key: 'TELEGRAM_BOT_TOKEN',      name: 'Telegram',        icon: '✈️' },
+    ];
+    const connected = connectors.filter(c => cfg[c.key] && String(cfg[c.key]).length > 0);
+    const disconnected = connectors.filter(c => !(cfg[c.key] && String(cfg[c.key]).length > 0));
+    const renderItem = c => `<div class="customize-list-item" data-key="${escapeHtml(c.key)}">${c.icon} ${escapeHtml(c.name)}</div>`;
+    connectedEl.innerHTML = connected.length ? connected.map(renderItem).join('') : '<div style="padding:6px 10px;color:var(--dimmer);font-size:12px">None</div>';
+    disconnectedEl.innerHTML = disconnected.length ? disconnected.map(renderItem).join('') : '<div style="padding:6px 10px;color:var(--dimmer);font-size:12px">All connected</div>';
+
+    document.querySelectorAll('#customize-connectors .customize-list-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('#customize-connectors .customize-list-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        const detail = document.getElementById('customize-connector-detail');
+        detail.innerHTML = `<div style="padding:20px"><h3 style="font-size:18px;margin-bottom:8px">${escapeHtml(item.textContent.trim())}</h3><p style="color:var(--dim);font-size:13px;margin-bottom:16px">Manage this connector in Settings → Integrations.</p><button class="btn btn-primary" id="customize-connector-goto">Open Settings</button></div>`;
+        document.getElementById('customize-connector-goto')?.addEventListener('click', () => {
+          switchPanel('settings');
+          document.querySelector('.settings-nav-item[data-stab="integrations"]')?.click();
+        });
+      });
+    });
+  } catch {
+    connectedEl.innerHTML = '<div style="padding:6px 10px;color:var(--red);font-size:12px">Failed to load</div>';
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 connectWS();
 switchPanel('chat');
 loadStatus(); // pre-load so status tab is instant
+// Pull profile early so welcome greeting picks up the right name
+loadSettings().catch(() => {});

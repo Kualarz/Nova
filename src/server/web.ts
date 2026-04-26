@@ -61,6 +61,9 @@ const WRITABLE_KEYS = new Set([
   'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID',
   'NOVA_WORKFLOWS',
   'PROFILE_NAME', 'PROFILE_BACKGROUND', 'PROFILE_STYLE',
+  'PROFILE_FULL_NAME', 'PROFILE_NICKNAME', 'PROFILE_WORK', 'PROFILE_PREFERENCES',
+  'NOTIFY_COMPLETIONS', 'APPEARANCE_COLOR', 'APPEARANCE_BG_ANIM',
+  'MEMORY_SEARCH', 'MEMORY_GENERATE', 'ARTIFACTS', 'TOOL_LOAD_MODE',
 ]);
 
 function maskSecret(key: string, value: string): string {
@@ -289,6 +292,29 @@ export function startWebServer(port = 3000): void {
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
+  });
+
+  app.patch('/api/conversations/:id/project', async (req, res) => {
+    try {
+      const db = await getDb();
+      const { projectId } = req.body as { projectId: string | null };
+      await db.linkConversationToProject(req.params.id, projectId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get('/api/skills', (_req, res) => {
+    try {
+      const config = getConfig();
+      const skillsDir = path.join(config.NOVA_WORKSPACE_PATH, 'skills');
+      if (!fs.existsSync(skillsDir)) return res.json([]);
+      const skills = fs.readdirSync(skillsDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => ({ name: f.replace(/\.md$/, ''), path: `skills/${f}` }));
+      res.json(skills);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
   });
 
   // ── Projects CRUD ───────────────────────────────────────────────────────────

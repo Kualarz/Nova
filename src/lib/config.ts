@@ -41,10 +41,25 @@ const ConfigSchema = z.object({
   // Phase 3 — server options
   NOVA_WORKFLOWS: z.enum(['on', 'off']).default('on'),
 
-  // User profile (Customize → Profile)
+  // User profile (Customize → Profile) — legacy keys kept for backward compat
   PROFILE_NAME: z.string().default(''),
   PROFILE_BACKGROUND: z.string().default(''),
   PROFILE_STYLE: z.string().default('balanced'),
+
+  // New profile keys (claude.ai-aligned)
+  PROFILE_FULL_NAME: z.string().default(''),
+  PROFILE_NICKNAME: z.string().default('Jimmy'),
+  PROFILE_WORK: z.string().default(''),
+  PROFILE_PREFERENCES: z.string().default(''),
+  NOTIFY_COMPLETIONS: z.string().default('off'),
+  APPEARANCE_COLOR: z.string().default('dark'),
+  APPEARANCE_BG_ANIM: z.string().default('auto'),
+
+  // Capabilities toggles
+  MEMORY_SEARCH: z.string().default('on'),
+  MEMORY_GENERATE: z.string().default('on'),
+  ARTIFACTS: z.string().default('on'),
+  TOOL_LOAD_MODE: z.string().default('on-demand'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
