@@ -381,12 +381,23 @@ export function startWebServer(port = 3000): void {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const sessions = new Map<WebSocket, ChatSession>();
 
+  // Helper: race a promise against a timeout so a stuck dependency surfaces
+  // as an error instead of an indefinite "connecting…" state on the client.
+  function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+      ),
+    ]);
+  }
+
   wss.on('connection', (ws) => {
     // Initialise session asynchronously
     void (async () => {
       try {
-        const conversationId = await startConversation();
-        const systemPrompt   = await buildBaseSystemPrompt();
+        const conversationId = await withTimeout(startConversation(), 8000, 'startConversation (DB)');
+        const systemPrompt   = await withTimeout(buildBaseSystemPrompt(), 8000, 'buildBaseSystemPrompt');
         sessions.set(ws, { conversationId, history: [], systemPrompt });
         ws.send(JSON.stringify({ type: 'ready' }));
       } catch (err) {
