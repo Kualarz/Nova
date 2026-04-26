@@ -145,6 +145,13 @@ export class LocalProvider implements DatabaseProvider {
     );
   }
 
+  async deleteConversation(id: string): Promise<void> {
+    const db = await this.getDb();
+    // Cascade: messages should already be ON DELETE CASCADE, but be safe
+    await db.query(`DELETE FROM messages WHERE conversation_id = $1`, [id]);
+    await db.query(`DELETE FROM conversations WHERE id = $1`, [id]);
+  }
+
   async getConversationMessages(conversationId: string): Promise<ConversationMessage[]> {
     const db = await this.getDb();
     const result = await db.query<{

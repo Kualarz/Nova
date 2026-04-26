@@ -114,6 +114,7 @@ export interface DatabaseProvider {
   startConversation(userId: string): Promise<string>;
   appendConversationMessage(conversationId: string, msg: ConversationMessage): Promise<void>;
   endConversation(id: string, summary?: string): Promise<void>;
+  deleteConversation(id: string): Promise<void>;
   getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
   listConversations(userId: string, limit: number): Promise<ConversationSummary[]>;
 

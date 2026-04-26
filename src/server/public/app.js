@@ -28,7 +28,17 @@ function switchPanel(name) {
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => switchPanel(item.dataset.panel));
+  item.addEventListener('click', () => {
+    if (item.dataset.panel === 'chat') {
+      // "New chat" — clear messages and reconnect
+      document.getElementById('chat-messages').innerHTML = '';
+      _hasMessages = false;
+      setWelcome(true);
+      if (typeof clearAttachments === 'function') clearAttachments();
+      if (ws) ws.close();
+    }
+    switchPanel(item.dataset.panel);
+  });
 });
 
 // ── Sidebar collapse ──────────────────────────────────────────────────────────
@@ -136,31 +146,169 @@ document.getElementById('sb-search-input').addEventListener('input', function ()
   if (label) label.style.display = q ? 'none' : '';
 });
 
-// ── Recent conversations ──────────────────────────────────────────────────────
+// ── Conversation management ──────────────────────────────────────────────────
+const PIN_KEY    = 'nova:pinned-conversations';
+const TITLE_KEY  = 'nova:custom-titles';
+
+function getPinned()        { try { return JSON.parse(localStorage.getItem(PIN_KEY) || '[]'); } catch { return []; } }
+function setPinned(ids)     { localStorage.setItem(PIN_KEY, JSON.stringify(ids)); }
+function getCustomTitles()  { try { return JSON.parse(localStorage.getItem(TITLE_KEY) || '{}'); } catch { return {}; } }
+function setCustomTitles(t) { localStorage.setItem(TITLE_KEY, JSON.stringify(t)); }
+
+function isPinned(id) { return getPinned().includes(id); }
+function togglePin(id) {
+  const pins = getPinned();
+  const idx = pins.indexOf(id);
+  if (idx >= 0) pins.splice(idx, 1);
+  else pins.unshift(id);
+  setPinned(pins);
+}
+function setTitle(id, title) {
+  const titles = getCustomTitles();
+  if (title && title.trim()) titles[id] = title.trim();
+  else delete titles[id];
+  setCustomTitles(titles);
+}
+function getTitle(id, fallback) {
+  return getCustomTitles()[id] || fallback;
+}
+
+let _allConversations = [];
+
 async function loadConversations() {
-  const list = document.getElementById('recents-list');
+  const recentsList = document.getElementById('recents-list');
   try {
-    const convs = await apiFetch('/api/conversations');
-    if (!convs.length) {
-      list.innerHTML = '<div class="conv-placeholder">No conversations yet</div>';
-      return;
-    }
-    list.innerHTML = convs.map(c => {
-      const title = c.first_message
-        ? c.first_message.slice(0, 60).replace(/\n/g, ' ')
-        : 'Untitled conversation';
-      return `
-        <div class="conv-item" data-id="${escapeHtml(c.id)}" title="${escapeHtml(title)}">
-          <span class="conv-title">${escapeHtml(title)}</span>
-        </div>
-      `;
-    }).join('');
+    _allConversations = await apiFetch('/api/conversations');
+    renderConversations();
   } catch {
-    list.innerHTML = '<div class="conv-placeholder">—</div>';
+    if (recentsList) recentsList.innerHTML = '<div class="conv-placeholder">—</div>';
   }
 }
 
-// Load conversations on startup
+function renderConversations() {
+  const pinnedList  = document.getElementById('pinned-list');
+  const recentsList = document.getElementById('recents-list');
+  if (!pinnedList || !recentsList) return;
+
+  const pinnedIds = getPinned();
+  const pinned    = [];
+  const recents   = [];
+  for (const c of _allConversations) {
+    (pinnedIds.includes(c.id) ? pinned : recents).push(c);
+  }
+
+  // Sort pinned by the pinned array order (most recent pin first)
+  pinned.sort((a, b) => pinnedIds.indexOf(a.id) - pinnedIds.indexOf(b.id));
+
+  pinnedList.innerHTML  = pinned.map(c => convItemHtml(c, true)).join('') ||
+    '<div class="conv-placeholder" style="font-size:11px">No pinned chats yet — use the ⋯ menu</div>';
+  recentsList.innerHTML = recents.map(c => convItemHtml(c, false)).join('') ||
+    '<div class="conv-placeholder">No recent chats</div>';
+
+  // Wire up three-dot menus and click handlers
+  document.querySelectorAll('#pinned-list .conv-item, #recents-list .conv-item').forEach(el => {
+    const id = el.dataset.id;
+    const moreBtn = el.querySelector('.conv-more-btn');
+    if (moreBtn) {
+      moreBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        openConvMenu(el, id);
+      });
+    }
+  });
+}
+
+function convItemHtml(c, isPinnedItem) {
+  const fallbackTitle = c.first_message
+    ? c.first_message.slice(0, 60).replace(/\n/g, ' ')
+    : 'Untitled conversation';
+  const title = getTitle(c.id, fallbackTitle);
+  const pinIcon = isPinnedItem
+    ? `<svg width="11" height="11" viewBox="0 0 12 12" fill="none" class="conv-pin-icon"><path d="M7.5 1.5L10.5 4.5L6 9L1.5 7.5L4.5 4.5L7.5 1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6 9L5 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`
+    : '';
+  return `
+    <div class="conv-item" data-id="${escapeHtml(c.id)}" title="${escapeHtml(title)}">
+      ${pinIcon}
+      <span class="conv-title">${escapeHtml(title)}</span>
+      <button class="conv-more-btn" type="button" title="Options">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1.1" fill="currentColor"/><circle cx="7" cy="7" r="1.1" fill="currentColor"/><circle cx="11" cy="7" r="1.1" fill="currentColor"/></svg>
+      </button>
+    </div>
+  `;
+}
+
+// ── Three-dot menu ────────────────────────────────────────────────────────────
+let convMenuEl = null;
+
+function closeConvMenu() {
+  if (convMenuEl) { convMenuEl.remove(); convMenuEl = null; }
+}
+
+function openConvMenu(itemEl, id) {
+  closeConvMenu();
+  const rect = itemEl.getBoundingClientRect();
+  const pinned = isPinned(id);
+
+  const menu = document.createElement('div');
+  menu.className = 'conv-menu';
+  menu.innerHTML = `
+    <button class="conv-menu-item" data-action="pin">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8 1.5L11 4.5L6.5 9L2 7.5L5 4.5L8 1.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.5 9L5 11.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      ${pinned ? 'Unpin' : 'Pin'}
+    </button>
+    <button class="conv-menu-item" data-action="rename">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 2L11 4.5L4.5 11H2V8.5L8.5 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      Rename
+    </button>
+    <button class="conv-menu-item danger" data-action="delete">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 3.5h8M4.5 3.5V2h4v1.5M5.5 6v4M7.5 6v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><rect x="2" y="3.5" width="9" height="7" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>
+      Delete
+    </button>
+  `;
+
+  menu.style.position = 'fixed';
+  menu.style.left   = (rect.right + 4) + 'px';
+  menu.style.top    = rect.top + 'px';
+  document.body.appendChild(menu);
+  convMenuEl = menu;
+
+  menu.querySelector('[data-action="pin"]').addEventListener('click', () => {
+    togglePin(id);
+    closeConvMenu();
+    renderConversations();
+  });
+  menu.querySelector('[data-action="rename"]').addEventListener('click', () => {
+    const cur = getTitle(id, '');
+    const next = prompt('Rename conversation:', cur);
+    if (next !== null) {
+      setTitle(id, next);
+      closeConvMenu();
+      renderConversations();
+    } else closeConvMenu();
+  });
+  menu.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+    closeConvMenu();
+    if (!confirm('Delete this conversation? This cannot be undone.')) return;
+    try {
+      await apiFetch('/api/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
+      // Also remove from pin list if pinned
+      const pins = getPinned().filter(p => p !== id);
+      setPinned(pins);
+      // Remove custom title
+      const titles = getCustomTitles();
+      delete titles[id];
+      setCustomTitles(titles);
+      // Reload
+      await loadConversations();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  });
+}
+
+document.addEventListener('click', () => closeConvMenu());
+
+// Initial load
 loadConversations();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1100,6 +1248,11 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
         : 'No changes detected',
       'ok'
     );
+    // After successful save, refresh the chat toolbar model picker
+    // to match the new provider/model
+    if (typeof loadModels === 'function') {
+      loadModels();
+    }
   } catch (e) {
     setSettingsStatus('Save failed: ' + e.message, 'error');
   }

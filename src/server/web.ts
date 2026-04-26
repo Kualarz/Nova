@@ -267,6 +267,16 @@ export function startWebServer(port = 3000): void {
     }
   });
 
+  app.delete('/api/conversations/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      await db.deleteConversation(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   app.get('/api/workspace', (_req, res) => {
     try {
       const config = getConfig();

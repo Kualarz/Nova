@@ -35,7 +35,7 @@
     <div class="sb-nav">
       <div class="nav-item active" data-panel="chat">
         <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 2H3a1 1 0 00-1 1v7a1 1 0 001 1h2l3 3 3-3h2a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        <span class="nav-label">Chat</span>
+        <span class="nav-label">New chat</span>
       </div>
       <div class="nav-item" data-panel="status">
         <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10l3-4 3 2 3-5 3 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -62,16 +62,7 @@
     <!-- Conversation history (scrollable) -->
     <div class="sb-history">
       <div class="sb-section-label">Pinned</div>
-      <div id="pinned-list">
-        <div class="conv-item" data-pinned="1">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="conv-pin-icon"><path d="M7.5 1.5L10.5 4.5L6 9L1.5 7.5L4.5 4.5L7.5 1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6 9L5 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-          <span class="conv-title">My AI Secretary</span>
-        </div>
-        <div class="conv-item" data-pinned="2">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="conv-pin-icon"><path d="M7.5 1.5L10.5 4.5L6 9L1.5 7.5L4.5 4.5L7.5 1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6 9L5 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-          <span class="conv-title">NOVA Setup</span>
-        </div>
-      </div>
+      <div id="pinned-list"></div>
 
       <div class="sb-section-label" id="recents-label">Recents</div>
       <div id="recents-list">
@@ -566,6 +557,26 @@
         </div>
 
         <div class="connect-grid">
+          <!-- Gmail -->
+          <div class="connect-card" data-service="gmail">
+            <div class="connect-card-icon">📧</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">Gmail</div>
+              <div class="connect-card-desc">Read inbox, summarize important emails, send replies</div>
+            </div>
+            <button class="btn connect-btn" data-key="GOOGLE_CREDENTIALS_PATH" data-name="Gmail" data-doc="https://console.cloud.google.com/apis/credentials">Connect</button>
+          </div>
+
+          <!-- Google Calendar -->
+          <div class="connect-card" data-service="gcal">
+            <div class="connect-card-icon">📅</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">Google Calendar</div>
+              <div class="connect-card-desc">Read events, schedule meetings, time-block your day</div>
+            </div>
+            <button class="btn connect-btn" data-key="GOOGLE_CREDENTIALS_PATH" data-name="Google Calendar" data-doc="https://console.cloud.google.com/apis/credentials">Connect</button>
+          </div>
+
           <!-- Notion -->
           <div class="connect-card" data-service="notion">
             <div class="connect-card-icon">📓</div>
@@ -629,7 +640,7 @@
           <div class="connect-modal-steps">
             <div class="connect-step">
               <div class="connect-step-num">1</div>
-              <div>A new tab just opened — sign in and copy your access token. (Or <a id="connect-modal-doc" href="#" target="_blank" style="color:var(--accent)">open it again</a>)</div>
+              <div>A new tab just opened — sign in and copy your access token (or download credentials JSON and paste its absolute path). (Or <a id="connect-modal-doc" href="#" target="_blank" style="color:var(--accent)">open it again</a>)</div>
             </div>
             <div class="connect-step">
               <div class="connect-step-num">2</div>

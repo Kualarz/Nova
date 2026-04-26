@@ -102,6 +102,13 @@ export class SupabaseProvider implements DatabaseProvider {
     if (error) throw new Error(`endConversation failed: ${error.message}`);
   }
 
+  async deleteConversation(id: string): Promise<void> {
+    const msgErr = await this.client.from('messages').delete().eq('conversation_id', id);
+    if (msgErr.error) throw new Error(`deleteConversation (messages) failed: ${msgErr.error.message}`);
+    const convErr = await this.client.from('conversations').delete().eq('id', id);
+    if (convErr.error) throw new Error(`deleteConversation failed: ${convErr.error.message}`);
+  }
+
   async getConversationMessages(conversationId: string): Promise<ConversationMessage[]> {
     const { data, error } = await this.client
       .from('messages')
