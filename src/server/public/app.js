@@ -67,39 +67,77 @@ async function apiFetch(url, opts) {
   }
   return res.json();
 }
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
 
 // ── STATUS PANEL ──────────────────────────────────────────────────────────────
 async function loadStatus() {
   try {
     const s = await apiFetch('/api/status');
-    document.getElementById('stat-uptime').textContent   = fmtUptime(s.uptime);
-    document.getElementById('stat-sessions').textContent = s.sessionCount;
-    document.getElementById('stat-days').textContent     = s.daysActive + ' days';
-    document.getElementById('stat-memories').textContent = s.memoryCount;
-    document.getElementById('stat-last').textContent     = s.lastSession ? fmtDate(s.lastSession) : '—';
-    document.getElementById('stat-provider').textContent = `${s.provider} / ${s.model}`;
-    document.getElementById('stat-db').textContent       = s.database;
+    document.getElementById('stat-uptime').textContent        = fmtUptime(s.uptime);
+    document.getElementById('stat-sessions').textContent      = s.sessionCount ?? '—';
+    document.getElementById('stat-days').textContent          = (s.daysActive ?? '—') + ' days active';
+    document.getElementById('stat-days2').textContent         = s.daysActive ?? '—';
+    document.getElementById('stat-last').textContent          = s.lastSession ? fmtDate(s.lastSession) : 'never';
+    document.getElementById('stat-memories').textContent      = s.memoryCount ?? '—';
+    document.getElementById('stat-provider').textContent      = s.provider ?? '—';
+    document.getElementById('stat-model').textContent         = s.model ?? '—';
+    document.getElementById('stat-complex').textContent       = s.complexModel ?? '—';
+    document.getElementById('stat-db').textContent            = s.database ?? '—';
+    document.getElementById('stat-wsfiles').textContent       = s.workspaceFiles ?? '—';
+    document.getElementById('stat-wspath').textContent        = s.workspacePath ?? '—';
+    document.getElementById('stat-tasks-total').textContent   = s.tasks?.total ?? '—';
+    document.getElementById('stat-tasks-running').textContent = s.tasks?.running ?? '0';
+    document.getElementById('stat-tasks-done').textContent    = s.tasks?.done ?? '0';
+    document.getElementById('stat-tasks-error').textContent   = s.tasks?.error ?? '0';
   } catch (e) {
     console.error('status load failed', e);
   }
 }
+document.getElementById('refresh-status-btn').addEventListener('click', loadStatus);
 
-// ── CHAT PANEL ────────────────────────────────────────────────────────────────
+// ── CHAT — welcome state ──────────────────────────────────────────────────────
+let _hasMessages = false;
+
+function setWelcome(show) {
+  const el = document.getElementById('chat-welcome');
+  if (!el) return;
+  if (show) el.classList.remove('hidden');
+  else      el.classList.add('hidden');
+}
+
+// ── CHAT — message rendering ──────────────────────────────────────────────────
 function appendChatMsg(role, text) {
+  // Hide welcome on first message
+  if (!_hasMessages) {
+    _hasMessages = true;
+    setWelcome(false);
+  }
+
   const box  = document.getElementById('chat-messages');
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + role;
 
+  if (role === 'nova') {
+    const sender = document.createElement('div');
+    sender.className = 'msg-sender';
+    sender.textContent = 'NOVA';
+    wrap.appendChild(sender);
+  }
+
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
   bubble.textContent = text;
+  wrap.appendChild(bubble);
 
   const meta = document.createElement('div');
   meta.className = 'msg-meta';
   meta.textContent = fmtTime(new Date().toISOString());
-
-  wrap.appendChild(bubble);
   wrap.appendChild(meta);
+
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
   return wrap;
@@ -111,7 +149,13 @@ function showThinking(show) {
   if (show && !thinkingEl) {
     thinkingEl = document.createElement('div');
     thinkingEl.className = 'msg nova';
-    thinkingEl.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+    const sender = document.createElement('div');
+    sender.className = 'msg-sender';
+    sender.textContent = 'NOVA';
+    thinkingEl.appendChild(sender);
+    const dots = document.createElement('div');
+    dots.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+    thinkingEl.appendChild(dots);
     box.appendChild(thinkingEl);
     box.scrollTop = box.scrollHeight;
   } else if (!show && thinkingEl) {
@@ -126,6 +170,7 @@ function setChatStatus(msg, cls) {
   el.className   = cls || '';
 }
 
+// ── CHAT — WebSocket ──────────────────────────────────────────────────────────
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -139,6 +184,7 @@ function connectWS() {
       wsReady = true;
       setChatStatus('connected', 'connected');
       document.getElementById('send-btn').disabled = false;
+      loadModels(); // populate model selector on connect
     } else if (msg.type === 'thinking') {
       showThinking(true);
     } else if (msg.type === 'response') {
@@ -146,9 +192,10 @@ function connectWS() {
       appendChatMsg('nova', msg.text);
     } else if (msg.type === 'error') {
       showThinking(false);
-      appendChatMsg('error', 'Error: ' + msg.message);
+      appendChatMsg('error', msg.message);
+    } else if (msg.type === 'model_set') {
+      updateModelLabel(msg.model);
     }
-    // 'user' echoes are handled locally for instant feedback — ignore server echo
   };
 
   ws.onclose = () => {
@@ -158,17 +205,29 @@ function connectWS() {
     setTimeout(connectWS, 3000);
   };
 
-  ws.onerror = () => {
-    setChatStatus('connection error', 'error');
-  };
+  ws.onerror = () => setChatStatus('connection error', 'error');
 }
+
+// ── CHAT — send ───────────────────────────────────────────────────────────────
+let pendingAttachments = []; // [{name, content}]
 
 function sendChatMessage() {
   const input = document.getElementById('chat-input');
-  const text  = input.value.trim();
-  if (!text || !wsReady) return;
+  let text = input.value.trim();
+  if (!wsReady) return;
 
-  appendChatMsg('user', text);
+  // Prepend any attachments as context blocks
+  if (pendingAttachments.length > 0) {
+    const ctx = pendingAttachments.map(a =>
+      `[Attached: ${a.name}]\n\`\`\`\n${a.content.slice(0, 4000)}\n\`\`\``
+    ).join('\n\n');
+    text = ctx + (text ? '\n\n' + text : '');
+    clearAttachments();
+  }
+
+  if (!text) return;
+
+  appendChatMsg('user', input.value.trim() || '(attached file)');
   ws.send(JSON.stringify({ type: 'message', text }));
   input.value = '';
   input.style.height = 'auto';
@@ -177,23 +236,235 @@ function sendChatMessage() {
 document.getElementById('send-btn').addEventListener('click', sendChatMessage);
 
 document.getElementById('chat-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendChatMessage();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
 });
 
-// Auto-resize textarea
 document.getElementById('chat-input').addEventListener('input', function() {
   this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
 });
 
 document.getElementById('clear-chat-btn').addEventListener('click', () => {
   document.getElementById('chat-messages').innerHTML = '';
-  // Reconnect to start fresh conversation
+  _hasMessages = false;
+  setWelcome(true);
+  clearAttachments();
   if (ws) ws.close();
 });
+
+// New Chat button (sidebar) — same as clear
+document.getElementById('new-chat-btn').addEventListener('click', () => {
+  document.getElementById('chat-messages').innerHTML = '';
+  _hasMessages = false;
+  setWelcome(true);
+  clearAttachments();
+  if (ws) ws.close();
+  switchPanel('chat');
+});
+
+// ── CHAT — attachment chips ───────────────────────────────────────────────────
+function addAttachment(name, content) {
+  pendingAttachments.push({ name, content });
+  renderAttachments();
+}
+
+function clearAttachments() {
+  pendingAttachments = [];
+  renderAttachments();
+}
+
+function renderAttachments() {
+  const el = document.getElementById('chat-attachments');
+  el.innerHTML = pendingAttachments.map((a, i) => `
+    <div class="attach-chip">
+      <span>📄</span>
+      <span class="attach-chip-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>
+      <button class="attach-chip-remove" data-idx="${i}">×</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('.attach-chip-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pendingAttachments.splice(Number(btn.dataset.idx), 1);
+      renderAttachments();
+    });
+  });
+}
+
+// ── CHAT — + menu (plus button) ───────────────────────────────────────────────
+const plusWrap = document.getElementById('plus-wrap');
+const plusMenu = document.getElementById('plus-menu');
+let plusOpen = false;
+
+function togglePlusMenu(e) {
+  e.stopPropagation();
+  plusOpen = !plusOpen;
+  plusMenu.style.display = plusOpen ? 'block' : 'none';
+  if (plusOpen) closeModelMenu();
+}
+function closePlusMenu() { plusOpen = false; plusMenu.style.display = 'none'; }
+
+document.getElementById('plus-btn').addEventListener('click', togglePlusMenu);
+
+// Attach file
+document.getElementById('attach-file-btn').addEventListener('click', () => {
+  closePlusMenu();
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    addAttachment(file.name, text);
+  } catch {
+    addAttachment(file.name, '[binary file — cannot preview]');
+  }
+  this.value = '';
+});
+
+// Attach image
+document.getElementById('attach-image-btn').addEventListener('click', () => {
+  closePlusMenu();
+  document.getElementById('image-input').click();
+});
+
+document.getElementById('image-input').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  addAttachment(file.name, `[Image: ${file.name} — ${(file.size/1024).toFixed(1)} KB]`);
+  this.value = '';
+});
+
+// Browse workspace
+document.getElementById('browse-workspace-btn').addEventListener('click', async () => {
+  closePlusMenu();
+  await openWsPicker();
+});
+
+// ── CHAT — workspace file picker ──────────────────────────────────────────────
+async function openWsPicker() {
+  const overlay = document.getElementById('ws-picker');
+  const list    = document.getElementById('ws-picker-list');
+  overlay.style.display = 'flex';
+  list.innerHTML = '<div style="padding:12px;color:var(--dimmer)">Loading…</div>';
+
+  try {
+    const files = await apiFetch('/api/workspace');
+    if (!files.length) {
+      list.innerHTML = '<div style="padding:12px;color:var(--dimmer)">No files found in workspace.</div>';
+      return;
+    }
+    list.innerHTML = files.map(f => {
+      const icon = f.startsWith('skills/') ? '⚙️' : f.startsWith('memory/') ? '📓' : '📄';
+      const name = f.split('/').pop();
+      const dir  = f.includes('/') ? f.split('/')[0] : '';
+      return `
+        <div class="ws-picker-item" data-path="${escapeHtml(f)}">
+          <span class="ws-picker-item-icon">${icon}</span>
+          <span class="ws-picker-item-name">${escapeHtml(name)}</span>
+          ${dir ? `<span class="ws-picker-item-path">${escapeHtml(dir)}</span>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.ws-picker-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const path = item.dataset.path;
+        closeWsPicker();
+        try {
+          const data = await apiFetch('/api/workspace/' + path);
+          addAttachment(path, data.content);
+        } catch (e) {
+          appendChatMsg('error', 'Failed to load file: ' + e.message);
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = `<div style="padding:12px;color:var(--red)">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function closeWsPicker() {
+  document.getElementById('ws-picker').style.display = 'none';
+}
+document.getElementById('ws-picker-close').addEventListener('click', closeWsPicker);
+document.getElementById('ws-picker').addEventListener('click', e => {
+  if (e.target === document.getElementById('ws-picker')) closeWsPicker();
+});
+
+// ── CHAT — model selector ─────────────────────────────────────────────────────
+let installedModels = [];
+let activeModel = '';
+
+const modelWrap = document.getElementById('model-wrap');
+const modelMenu = document.getElementById('model-menu');
+let modelMenuOpen = false;
+
+function toggleModelMenu(e) {
+  e.stopPropagation();
+  modelMenuOpen = !modelMenuOpen;
+  modelMenu.style.display = modelMenuOpen ? 'block' : 'none';
+  if (modelMenuOpen) closePlusMenu();
+}
+function closeModelMenu() { modelMenuOpen = false; modelMenu.style.display = 'none'; }
+
+document.getElementById('model-btn').addEventListener('click', toggleModelMenu);
+
+// Close menus when clicking outside
+document.addEventListener('click', () => { closePlusMenu(); closeModelMenu(); });
+
+async function loadModels() {
+  try {
+    const data = await apiFetch('/api/models');
+    installedModels = data.models || [];
+    activeModel = data.current || '';
+    updateModelLabel(activeModel);
+    renderModelMenu();
+  } catch {
+    document.getElementById('model-btn-label').textContent = 'models';
+  }
+}
+
+function fmtSize(bytes) {
+  if (!bytes) return '';
+  const gb = bytes / 1e9;
+  return gb >= 1 ? gb.toFixed(1) + ' GB' : (bytes / 1e6).toFixed(0) + ' MB';
+}
+
+function renderModelMenu() {
+  if (!installedModels.length) {
+    modelMenu.innerHTML = '<div class="popover-section-label">No models found</div>';
+    return;
+  }
+  modelMenu.innerHTML = `
+    <div class="popover-section-label">Installed models</div>
+    ${installedModels.map(m => `
+      <button class="popover-item${m.name === activeModel ? ' active' : ''}" data-model="${escapeHtml(m.name)}">
+        <span class="popover-icon">🤖</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(m.name)}</span>
+        <span class="popover-item-sub">${fmtSize(m.size)}</span>
+      </button>
+    `).join('')}
+  `;
+  modelMenu.querySelectorAll('.popover-item[data-model]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const model = btn.dataset.model;
+      activeModel = model;
+      updateModelLabel(model);
+      renderModelMenu();
+      closeModelMenu();
+      if (ws && wsReady) {
+        ws.send(JSON.stringify({ type: 'set_model', model }));
+      }
+    });
+  });
+}
+
+function updateModelLabel(model) {
+  const short = model.replace(/:latest$/, '');
+  document.getElementById('model-btn-label').textContent = short || 'model';
+}
 
 // ── WORKSPACE PANEL ───────────────────────────────────────────────────────────
 async function loadWorkspaceTree() {
@@ -201,7 +472,8 @@ async function loadWorkspaceTree() {
     const files = await apiFetch('/api/workspace');
     renderWorkspaceTree(files);
   } catch (e) {
-    console.error('workspace load failed', e);
+    const tree = document.getElementById('file-tree');
+    tree.innerHTML = `<div class="ws-error">Failed to load: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -256,6 +528,8 @@ async function openFile(filePath) {
     });
   } catch (e) {
     setEditorStatus('Failed to load: ' + e.message, 'error');
+    document.getElementById('editor-placeholder').style.display = 'flex';
+    document.getElementById('editor-main').style.display = 'none';
   }
 }
 
@@ -355,44 +629,122 @@ document.getElementById('memory-search').addEventListener('input', function() {
 
 document.getElementById('refresh-memories-btn').addEventListener('click', loadMemories);
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
-
 // ── TASKS PANEL ───────────────────────────────────────────────────────────────
+let allTasks = [];
+
 async function loadTasks() {
   try {
-    const tasks = await apiFetch('/api/tasks');
-    const list  = document.getElementById('tasks-list');
-    if (!tasks.length) {
-      list.innerHTML = '<div class="empty-state">No tasks yet — use /spawn in NOVA to queue Claude Code tasks.</div>';
-      return;
-    }
-    list.innerHTML = tasks.map(t => `
-      <div class="task-card">
-        <div class="task-card-header">
-          <span class="task-status-dot ${t.status}"></span>
-          <span class="task-desc">${escapeHtml(t.description)}</span>
-          <span class="task-dates">${fmtAge(t.created_at)}</span>
-        </div>
-        ${t.result ? `<div class="task-result">${escapeHtml(t.result.slice(0, 300))}${t.result.length > 300 ? '…' : ''}</div>` : ''}
-        ${t.error  ? `<div class="task-error">${escapeHtml(t.error)}</div>` : ''}
-      </div>
-    `).join('');
+    allTasks = await apiFetch('/api/tasks');
+    renderTasks(allTasks);
   } catch (e) {
-    console.error('tasks load failed', e);
+    document.getElementById('tasks-list').innerHTML =
+      `<div class="empty-state" style="color:var(--red)">Failed to load: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+function renderTasks(tasks) {
+  const list = document.getElementById('tasks-list');
+  if (!tasks.length) {
+    list.innerHTML = '<div class="empty-state">No tasks yet — click <strong>+ New Task</strong> to add one.</div>';
+    return;
+  }
+  list.innerHTML = tasks.map(t => `
+    <div class="task-card" data-id="${escapeHtml(t.id)}">
+      <div class="task-card-header">
+        <span class="task-status-dot ${t.status}" title="${t.status}"></span>
+        <span class="task-desc">${escapeHtml(t.description)}</span>
+        <span class="task-dates">${fmtAge(t.created_at)}</span>
+        <button class="btn btn-sm btn-danger task-delete-btn" data-id="${escapeHtml(t.id)}" title="Delete task">✕</button>
+      </div>
+      ${t.result ? `<div class="task-result">${escapeHtml(t.result.slice(0, 300))}${t.result.length > 300 ? '…' : ''}</div>` : ''}
+      ${t.error  ? `<div class="task-error">${escapeHtml(t.error)}</div>` : ''}
+    </div>
+  `).join('');
+
+  // Wire delete buttons
+  list.querySelectorAll('.task-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (!confirm('Delete this task?')) return;
+      try {
+        await apiFetch('/api/tasks/' + id, { method: 'DELETE' });
+        await loadTasks();
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+      }
+    });
+  });
 }
 
 document.getElementById('refresh-tasks-btn').addEventListener('click', loadTasks);
 
+// Task modal open/close
+const taskModal = document.getElementById('task-modal');
+function openTaskModal() {
+  document.getElementById('task-topic').value  = '';
+  document.getElementById('task-detail').value = '';
+  document.getElementById('task-action').value = '';
+  taskModal.style.display = 'flex';
+  document.getElementById('task-topic').focus();
+}
+function closeTaskModal() {
+  taskModal.style.display = 'none';
+}
+
+document.getElementById('new-task-btn').addEventListener('click', openTaskModal);
+document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
+document.getElementById('task-modal-cancel').addEventListener('click', closeTaskModal);
+taskModal.addEventListener('click', e => { if (e.target === taskModal) closeTaskModal(); });
+
+document.getElementById('task-modal-submit').addEventListener('click', async () => {
+  const topic  = document.getElementById('task-topic').value.trim();
+  const detail = document.getElementById('task-detail').value.trim();
+  const action = document.getElementById('task-action').value.trim();
+  if (!topic) {
+    document.getElementById('task-topic').focus();
+    return;
+  }
+  const btn = document.getElementById('task-modal-submit');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  try {
+    const res = await apiFetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, detail, action }),
+    });
+    allTasks = res.tasks;
+    renderTasks(allTasks);
+    closeTaskModal();
+  } catch (err) {
+    alert('Failed to create task: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Task';
+  }
+});
+
+// Keyboard shortcut: Enter in topic field submits modal
+document.getElementById('task-topic').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('task-modal-submit').click();
+});
+
 // ── SETTINGS PANEL ────────────────────────────────────────────────────────────
+// Tab switching
+document.querySelectorAll('.stab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-tab-body').forEach(b => b.style.display = 'none');
+    tab.classList.add('active');
+    const body = document.getElementById('stab-' + tab.dataset.stab);
+    if (body) body.style.display = 'block';
+  });
+});
+
 async function loadSettings() {
   try {
     const cfg = await apiFetch('/api/settings');
-    // Populate form fields
     setField('MODEL_PROVIDER',           cfg.MODEL_PROVIDER);
     setField('DEFAULT_MODEL',            cfg.DEFAULT_MODEL);
     setField('COMPLEX_MODEL',            cfg.COMPLEX_MODEL);
@@ -419,11 +771,7 @@ async function loadSettings() {
 function setField(id, value) {
   const el = document.getElementById('cfg-' + id);
   if (!el) return;
-  if (el.tagName === 'SELECT') {
-    el.value = value || '';
-  } else {
-    el.value = value || '';
-  }
+  el.value = value || '';
 }
 
 function setSettingsStatus(msg, cls) {
@@ -455,7 +803,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     const updated = res.updated || [];
     setSettingsStatus(
       updated.length
-        ? `Saved ${updated.length} setting(s): ${updated.join(', ')}`
+        ? `Saved: ${updated.join(', ')}`
         : 'No changes detected',
       'ok'
     );

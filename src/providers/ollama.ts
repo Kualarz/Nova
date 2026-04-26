@@ -82,7 +82,16 @@ export class OllamaProvider implements LLMProvider {
     }).catch((err: unknown): never => this.throwIfConnectionRefused(err, '/api/chat'));
 
     if (!resp.ok) {
-      throw new Error(`Ollama chat error ${resp.status}: ${resp.statusText}`);
+      const errBody = await resp.text().catch(() => resp.statusText);
+      const errJson = (() => { try { return JSON.parse(errBody) as { error?: string }; } catch { return null; } })();
+      const detail = errJson?.error ?? errBody ?? resp.statusText;
+      if (detail.includes('does not support tools')) {
+        throw new Error(`Model "${model}" does not support tool calling. Switch to a model that does (e.g. qwen3.5:9b, qwen2.5:7b, llama3.1:8b) in Settings → AI.`);
+      }
+      if (resp.status === 404) {
+        throw new Error(`Model "${model}" not found in Ollama. Run: ollama pull ${model}`);
+      }
+      throw new Error(`Ollama chat error ${resp.status}: ${detail}`);
     }
 
     const data = (await resp.json()) as OllamaChatResponse;

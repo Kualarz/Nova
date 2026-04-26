@@ -124,6 +124,7 @@ export interface DatabaseProvider {
   // Tasks
   insertTask(params: InsertTaskParams): Promise<string>;
   updateTask(params: UpdateTaskParams): Promise<void>;
+  deleteTask(id: string): Promise<void>;
   listTasks(userId: string, limit: number): Promise<Task[]>;
   getTaskCount(userId: string): Promise<number>;
 

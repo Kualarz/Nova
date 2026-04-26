@@ -22,7 +22,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getConfig, resetConfig } from '../lib/config.js';
 import { getDb } from '../db/client.js';
-import { listRecentTasks } from '../tasks/store.js';
+import { listRecentTasks, createTask, deleteTask } from '../tasks/store.js';
 import { runWebTurn } from '../agent/nova.js';
 import { buildBaseSystemPrompt } from '../agent/system-prompt.js';
 import { startConversation, appendMessage, endConversation } from '../conversations/store.js';
@@ -119,6 +119,7 @@ interface ChatSession {
   conversationId: string;
   history: Message[];
   systemPrompt: string;
+  model?: string; // user-selected model override for this session
 }
 
 function buildHistoryTranscript(history: Message[]): string {
@@ -148,12 +149,24 @@ export function startWebServer(port = 3000): void {
       const config = getConfig();
       const db = await getDb();
       const stats = await db.getSessionStats(config.NOVA_USER_ID);
+      const tasks = await listRecentTasks(200);
+      const tasksByStatus = { running: 0, done: 0, error: 0 };
+      for (const t of tasks) {
+        if (t.status in tasksByStatus) tasksByStatus[t.status as keyof typeof tasksByStatus]++;
+      }
+      const wsFiles = config.NOVA_WORKSPACE_PATH
+        ? (() => { try { return getWorkspaceFiles(config.NOVA_WORKSPACE_PATH).length; } catch { return 0; } })()
+        : 0;
       res.json({
         ...stats,
         uptime: Date.now() - startTime,
         provider: config.MODEL_PROVIDER,
         model: config.DEFAULT_MODEL,
+        complexModel: config.COMPLEX_MODEL,
         database: config.DATABASE_TYPE,
+        workspacePath: config.NOVA_WORKSPACE_PATH,
+        workspaceFiles: wsFiles,
+        tasks: { total: tasks.length, ...tasksByStatus },
       });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -173,8 +186,44 @@ export function startWebServer(port = 3000): void {
 
   app.get('/api/tasks', async (_req, res) => {
     try {
-      const tasks = await listRecentTasks(20);
+      const tasks = await listRecentTasks(50);
       res.json(tasks);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/tasks', async (req, res) => {
+    try {
+      const { topic, detail, action } = req.body as { topic?: string; detail?: string; action?: string };
+      if (!topic?.trim()) return res.status(400).json({ error: 'topic is required' });
+      // Build a description from the fields
+      const desc = [topic.trim(), detail?.trim(), action?.trim()].filter(Boolean).join(' — ');
+      const id = await createTask(desc, process.cwd());
+      const tasks = await listRecentTasks(50);
+      res.json({ id, tasks });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.delete('/api/tasks/:id', async (req, res) => {
+    try {
+      await deleteTask(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get('/api/models', async (_req, res) => {
+    try {
+      const config = getConfig();
+      const resp = await fetch(`${config.OLLAMA_HOST}/api/tags`);
+      if (!resp.ok) return res.status(502).json({ error: 'Ollama unreachable' });
+      const data = (await resp.json()) as { models: Array<{ name: string; size: number }> };
+      const models = (data.models ?? []).map(m => ({ name: m.name, size: m.size }));
+      res.json({ models, current: config.DEFAULT_MODEL });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -192,7 +241,8 @@ export function startWebServer(port = 3000): void {
   app.get('/api/workspace/{*path}', (req, res) => {
     try {
       const config = getConfig();
-      const filePath = (req.params as unknown as Record<string, string>).path ?? '';
+      const _p = (req.params as unknown as Record<string, unknown>).path;
+      const filePath = Array.isArray(_p) ? _p.join('/') : ((_p as string) ?? '');
       const abs = safeWorkspacePath(config.NOVA_WORKSPACE_PATH, filePath);
       if (!abs) return res.status(400).json({ error: 'Invalid path' });
       if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Not found' });
@@ -205,7 +255,8 @@ export function startWebServer(port = 3000): void {
   app.put('/api/workspace/{*path}', (req, res) => {
     try {
       const config = getConfig();
-      const filePath = (req.params as unknown as Record<string, string>).path ?? '';
+      const _p2 = (req.params as unknown as Record<string, unknown>).path;
+      const filePath = Array.isArray(_p2) ? _p2.join('/') : ((_p2 as string) ?? '');
       const abs = safeWorkspacePath(config.NOVA_WORKSPACE_PATH, filePath);
       if (!abs) return res.status(400).json({ error: 'Invalid path' });
       const content = (req.body as { content?: string }).content ?? '';
@@ -284,7 +335,12 @@ export function startWebServer(port = 3000): void {
 
         let text = '';
         try {
-          const msg = JSON.parse(raw.toString()) as { type: string; text?: string };
+          const msg = JSON.parse(raw.toString()) as { type: string; text?: string; model?: string };
+          if (msg.type === 'set_model' && msg.model) {
+            session.model = msg.model;
+            ws.send(JSON.stringify({ type: 'model_set', model: msg.model }));
+            return;
+          }
           if (msg.type !== 'message' || !msg.text?.trim()) return;
           text = msg.text.trim();
         } catch {
@@ -297,14 +353,23 @@ export function startWebServer(port = 3000): void {
 
         try {
           await appendMessage(session.conversationId, { role: 'user', content: text });
-          const { text: reply, newMessages } = await runWebTurn(session.systemPrompt, session.history, text);
+          const { text: reply, newMessages } = await runWebTurn(session.systemPrompt, session.history, text, { model: session.model });
 
           for (const m of newMessages) session.history.push(m);
           await appendMessage(session.conversationId, { role: 'assistant', content: reply });
 
           ws.send(JSON.stringify({ type: 'response', text: reply }));
         } catch (err) {
-          ws.send(JSON.stringify({ type: 'error', message: (err as Error).message }));
+          const raw = (err as Error).message ?? '';
+          let friendly = raw;
+          if (raw.includes('404')) {
+            const cfg = getConfig();
+            friendly = `Model not found in Ollama (404). Run: ollama pull ${cfg.DEFAULT_MODEL}\n\nThen restart the server.`;
+          } else if (raw.includes('ECONNREFUSED') || raw.includes('fetch failed')) {
+            const cfg = getConfig();
+            friendly = `Cannot reach Ollama at ${cfg.OLLAMA_HOST}. Make sure Ollama is running.`;
+          }
+          ws.send(JSON.stringify({ type: 'error', message: friendly }));
         }
       })();
     });

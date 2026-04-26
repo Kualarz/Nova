@@ -33,7 +33,8 @@ function buildTranscript(history: Message[]): string {
 
 async function runTurn(
   systemPrompt: string,
-  history: Message[]
+  history: Message[],
+  opts: { model?: string } = {}
 ): Promise<{ text: string; newMessages: Message[] }> {
   const tools = toApiTools();
   const added: Message[] = [];
@@ -45,7 +46,7 @@ async function runTurn(
   ];
 
   for (let i = 0; i < 10; i++) {
-    const response = await router.chat(messages, { tools });
+    const response = await router.chat(messages, { tools, model: opts.model });
 
     if (response.stop_reason === 'stop') {
       const text = response.content ?? '';
@@ -99,10 +100,11 @@ async function runTurn(
 export async function runWebTurn(
   systemPrompt: string,
   history: Message[],
-  userPrompt: string
+  userPrompt: string,
+  opts: { model?: string } = {}
 ): Promise<{ text: string; newMessages: Message[] }> {
   const userMsg: Message = { role: 'user', content: userPrompt };
-  return runTurn(systemPrompt, [...history, userMsg]);
+  return runTurn(systemPrompt, [...history, userMsg], opts);
 }
 
 export async function runPrompt(userPrompt: string): Promise<string> {

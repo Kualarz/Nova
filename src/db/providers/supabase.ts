@@ -163,6 +163,11 @@ export class SupabaseProvider implements DatabaseProvider {
     if (error) throw new Error(`updateTask failed: ${error.message}`);
   }
 
+  async deleteTask(id: string): Promise<void> {
+    const { error } = await this.client.from('tasks').delete().eq('id', id);
+    if (error) throw new Error(`deleteTask failed: ${error.message}`);
+  }
+
   async listTasks(userId: string, limit: number): Promise<Task[]> {
     const { data, error } = await this.client
       .from('tasks')

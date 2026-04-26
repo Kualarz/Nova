@@ -15,14 +15,18 @@
       <span class="dot"></span>NOVA
     </div>
 
+    <button class="sidebar-new-chat" id="new-chat-btn" type="button">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      New Chat
+    </button>
+
+    <div class="sidebar-section">Menu</div>
+
     <div class="nav-item active" data-panel="chat">
       <span class="icon">💬</span>Chat
     </div>
     <div class="nav-item" data-panel="status">
       <span class="icon">📡</span>Status
-    </div>
-    <div class="nav-item" data-panel="memory">
-      <span class="icon">🧠</span>Memory
     </div>
     <div class="nav-item" data-panel="tasks">
       <span class="icon">⚡</span>Tasks
@@ -30,11 +34,20 @@
     <div class="nav-item" data-panel="workspace">
       <span class="icon">📝</span>Workspace
     </div>
+    <div class="nav-item" data-panel="memory">
+      <span class="icon">🧠</span>Memory
+    </div>
     <div class="nav-item" data-panel="settings">
       <span class="icon">⚙</span>Settings
     </div>
 
-    <div class="sidebar-version">NOVA · Phase 3</div>
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">J</div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name">Jimmy</div>
+        <div class="sidebar-user-role">NOVA · Phase 3</div>
+      </div>
+    </div>
   </nav>
 
   <!-- ── Content ──────────────────────────────────────────────────────────── -->
@@ -42,28 +55,107 @@
 
     <!-- ── CHAT PANEL ──────────────────────────────────────────────────────── -->
     <div id="panel-chat" class="panel active">
+
+      <!-- Welcome / empty state -->
+      <div id="chat-welcome">
+        <div class="welcome-greeting">Hey, Jimmy.</div>
+        <div class="welcome-sub">What's on your mind?</div>
+      </div>
+
+      <!-- Messages stream — centered column -->
       <div id="chat-messages"></div>
-      <div id="chat-status">connecting…</div>
-      <form id="chat-form" onsubmit="return false">
-        <textarea
-          id="chat-input"
-          placeholder="Message NOVA… (Enter to send, Shift+Enter for newline)"
-          rows="1"
-          autocomplete="off"
-          spellcheck="false"
-        ></textarea>
-        <button id="send-btn" class="btn btn-primary" type="button" disabled>Send</button>
-        <button id="clear-chat-btn" class="btn" type="button" title="Clear chat &amp; reconnect">Clear</button>
-      </form>
+
+      <!-- Connection status -->
+      <div id="chat-status-bar">
+        <span id="chat-status">connecting…</span>
+        <button id="clear-chat-btn" class="chat-meta-btn" type="button" title="Clear chat">Clear</button>
+      </div>
+
+      <!-- Centered input area -->
+      <div id="chat-input-area">
+        <div id="chat-box">
+
+          <!-- Attachment / file preview row -->
+          <div id="chat-attachments"></div>
+
+          <!-- Textarea -->
+          <textarea
+            id="chat-input"
+            placeholder="Message NOVA…"
+            rows="1"
+            autocomplete="off"
+            spellcheck="false"
+          ></textarea>
+
+          <!-- Toolbar row inside the box -->
+          <div id="chat-toolbar">
+
+            <!-- Left side: + button -->
+            <div class="toolbar-left">
+              <div class="toolbar-popover-wrap" id="plus-wrap">
+                <button id="plus-btn" class="toolbar-icon-btn" title="Attach / insert">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+                <div id="plus-menu" class="toolbar-popover" style="display:none">
+                  <button class="popover-item" id="attach-file-btn">
+                    <span class="popover-icon">📎</span> Attach file
+                  </button>
+                  <button class="popover-item" id="browse-workspace-btn">
+                    <span class="popover-icon">📂</span> Workspace file
+                  </button>
+                  <button class="popover-item" id="attach-image-btn">
+                    <span class="popover-icon">🖼️</span> Image
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right side: model selector + send -->
+            <div class="toolbar-right">
+              <div class="toolbar-popover-wrap" id="model-wrap">
+                <button id="model-btn" class="toolbar-model-btn" title="Select model">
+                  <span id="model-btn-label">···</span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <div id="model-menu" class="toolbar-popover model-popover" style="display:none"></div>
+              </div>
+              <button id="send-btn" class="toolbar-send-btn" type="button" disabled title="Send (Enter)">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 13V3M3 8l5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+
+          </div><!-- /#chat-toolbar -->
+        </div><!-- /#chat-box -->
+
+        <p id="chat-hint">Enter to send · Shift+Enter for new line</p>
+      </div><!-- /#chat-input-area -->
+
+      <!-- Hidden inputs -->
+      <input type="file" id="file-input" style="display:none" accept=".txt,.md,.pdf,.js,.ts,.py,.json,.csv,.html,.css">
+      <input type="file" id="image-input" style="display:none" accept="image/*">
+
+    </div>
+
+    <!-- ── WORKSPACE FILE PICKER (inline overlay) ──────────────────────────── -->
+    <div id="ws-picker" class="ws-picker-overlay" style="display:none">
+      <div class="ws-picker-box">
+        <div class="ws-picker-header">
+          <span>Insert workspace file</span>
+          <button id="ws-picker-close" class="modal-close">✕</button>
+        </div>
+        <div id="ws-picker-list" class="ws-picker-list"></div>
+      </div>
     </div>
 
     <!-- ── STATUS PANEL ────────────────────────────────────────────────────── -->
     <div id="panel-status" class="panel">
       <div class="panel-header">
         <h2>Status</h2>
-        <span style="color:var(--dimmer);font-size:11px">runtime stats</span>
+        <button id="refresh-status-btn" class="btn btn-sm" type="button">Refresh</button>
       </div>
       <div class="status-body">
+
+        <div class="status-section-label">Runtime</div>
         <div class="stat-grid">
           <div class="stat-card">
             <div class="stat-label">Uptime</div>
@@ -72,25 +164,76 @@
           <div class="stat-card">
             <div class="stat-label">Sessions</div>
             <div class="stat-value" id="stat-sessions">—</div>
-            <div class="stat-sub"  id="stat-days">—</div>
+            <div class="stat-sub" id="stat-days">—</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-label">Last Session</div>
+            <div class="stat-value stat-value-sm" id="stat-last">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Days Active</div>
+            <div class="stat-value" id="stat-days2">—</div>
+          </div>
+        </div>
+
+        <div class="status-section-label">AI</div>
+        <div class="stat-grid">
+          <div class="stat-card stat-card-wide">
+            <div class="stat-label">Provider</div>
+            <div class="stat-value stat-value-sm" id="stat-provider">—</div>
+          </div>
+          <div class="stat-card stat-card-wide">
+            <div class="stat-label">Default Model</div>
+            <div class="stat-value stat-value-sm" id="stat-model">—</div>
+          </div>
+          <div class="stat-card stat-card-wide">
+            <div class="stat-label">Complex Model</div>
+            <div class="stat-value stat-value-sm" id="stat-complex">—</div>
+          </div>
+          <div class="stat-card stat-card-wide">
+            <div class="stat-label">Database</div>
+            <div class="stat-value stat-value-sm" id="stat-db">—</div>
+          </div>
+        </div>
+
+        <div class="status-section-label">Memory &amp; Knowledge</div>
+        <div class="stat-grid">
           <div class="stat-card">
             <div class="stat-label">Memories (Tier 3)</div>
             <div class="stat-value" id="stat-memories">—</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Last Session</div>
-            <div class="stat-value" id="stat-last" style="font-size:14px">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Provider / Model</div>
-            <div class="stat-value" id="stat-provider" style="font-size:13px">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Database</div>
-            <div class="stat-value" id="stat-db" style="font-size:16px">—</div>
+            <div class="stat-label">Workspace Files</div>
+            <div class="stat-value" id="stat-wsfiles">—</div>
           </div>
         </div>
+
+        <div class="status-section-label">Tasks</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total</div>
+            <div class="stat-value" id="stat-tasks-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Running</div>
+            <div class="stat-value" id="stat-tasks-running" style="color:var(--amber)">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Done</div>
+            <div class="stat-value" id="stat-tasks-done" style="color:var(--green)">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Error</div>
+            <div class="stat-value" id="stat-tasks-error" style="color:var(--red)">—</div>
+          </div>
+        </div>
+
+        <div class="status-section-label">Workspace</div>
+        <div class="stat-card stat-card-path">
+          <div class="stat-label">Path</div>
+          <div class="stat-value stat-value-path" id="stat-wspath">—</div>
+        </div>
+
       </div>
     </div>
 
@@ -112,10 +255,41 @@
     <div id="panel-tasks" class="panel">
       <div class="panel-header">
         <h2>Tasks</h2>
-        <button id="refresh-tasks-btn" class="btn btn-sm" type="button">Refresh</button>
+        <div style="display:flex;gap:8px">
+          <button id="refresh-tasks-btn" class="btn btn-sm" type="button">Refresh</button>
+          <button id="new-task-btn" class="btn btn-sm btn-primary" type="button">+ New Task</button>
+        </div>
       </div>
       <div id="tasks-list" class="tasks-list">
         <div class="empty-state">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ── NEW TASK MODAL ──────────────────────────────────────────────────── -->
+    <div id="task-modal" class="modal-overlay" style="display:none">
+      <div class="modal">
+        <div class="modal-header">
+          <span class="modal-title">New Task</span>
+          <button id="task-modal-close" class="modal-close" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="task-topic">Topic <span style="color:var(--red)">*</span></label>
+            <input id="task-topic" type="text" placeholder="e.g. Refactor auth module" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="task-detail">Detail</label>
+            <textarea id="task-detail" rows="3" placeholder="Describe what this task involves…" style="resize:vertical"></textarea>
+          </div>
+          <div class="field">
+            <label for="task-action">Command / Action</label>
+            <input id="task-action" type="text" placeholder="e.g. Run tests, Notify on Telegram…" autocomplete="off">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="task-modal-cancel" class="btn" type="button">Cancel</button>
+          <button id="task-modal-submit" class="btn btn-primary" type="button">Create Task</button>
+        </div>
       </div>
     </div>
 
@@ -156,154 +330,145 @@
     <div id="panel-settings" class="panel">
       <div class="panel-header">
         <h2>Settings</h2>
-        <span style="color:var(--dimmer);font-size:11px">writes to .env · some changes need restart</span>
+        <span style="color:var(--dimmer);font-size:11px">writes to .env</span>
       </div>
-      <div class="settings-body">
 
-        <!-- Model ---------------------------------------------------------- -->
-        <div class="settings-section">
-          <h3>Model</h3>
-          <div class="field-row">
-            <div class="field">
-              <label for="cfg-MODEL_PROVIDER">Provider</label>
-              <select id="cfg-MODEL_PROVIDER">
-                <option value="ollama">ollama</option>
-                <option value="openrouter">openrouter</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="cfg-DEFAULT_MODEL">Default Model</label>
-              <input id="cfg-DEFAULT_MODEL" type="text" placeholder="e.g. llama3.1">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="cfg-COMPLEX_MODEL">Complex Model</label>
-              <input id="cfg-COMPLEX_MODEL" type="text" placeholder="e.g. qwen2.5:72b">
-            </div>
-            <div class="field">
-              <label for="cfg-EMBED_MODEL">Embed Model</label>
-              <input id="cfg-EMBED_MODEL" type="text" placeholder="e.g. nomic-embed-text">
-            </div>
-          </div>
-          <div class="field">
-            <label for="cfg-OLLAMA_HOST">Ollama Host</label>
-            <input id="cfg-OLLAMA_HOST" type="text" placeholder="http://localhost:11434">
-          </div>
-          <div class="field">
-            <label for="cfg-OPENROUTER_API_KEY">OpenRouter API Key</label>
-            <div class="flex-row">
-              <input id="cfg-OPENROUTER_API_KEY" type="password" autocomplete="off">
-              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENROUTER_API_KEY">show</button>
-            </div>
-          </div>
-        </div>
+      <!-- Tab bar -->
+      <div class="settings-tabs">
+        <button class="stab active" data-stab="ai">AI</button>
+        <button class="stab" data-stab="database">Database</button>
+        <button class="stab" data-stab="workspace">Workspace</button>
+        <button class="stab" data-stab="integrations">Integrations</button>
+      </div>
 
-        <!-- Database ------------------------------------------------------- -->
-        <div class="settings-section">
-          <h3>Database</h3>
-          <div class="field-row">
-            <div class="field">
-              <label for="cfg-DATABASE_TYPE">Type</label>
-              <select id="cfg-DATABASE_TYPE">
-                <option value="local">local (PGlite)</option>
-                <option value="supabase">supabase</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="cfg-PGLITE_PATH">PGlite Path</label>
-              <input id="cfg-PGLITE_PATH" type="text" placeholder="./data/db">
-            </div>
-          </div>
+      <!-- Tab: AI -->
+      <div id="stab-ai" class="settings-tab-body">
+        <div class="field-row">
           <div class="field">
-            <label for="cfg-SUPABASE_URL">Supabase URL</label>
-            <input id="cfg-SUPABASE_URL" type="text" placeholder="https://xxx.supabase.co">
-          </div>
-          <div class="field">
-            <label for="cfg-SUPABASE_SERVICE_ROLE_KEY">Supabase Service Role Key</label>
-            <div class="flex-row">
-              <input id="cfg-SUPABASE_SERVICE_ROLE_KEY" type="password" autocomplete="off">
-              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-SUPABASE_SERVICE_ROLE_KEY">show</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Workspace ------------------------------------------------------ -->
-        <div class="settings-section">
-          <h3>Workspace</h3>
-          <div class="field">
-            <label for="cfg-NOVA_WORKSPACE_PATH">Workspace Path</label>
-            <input id="cfg-NOVA_WORKSPACE_PATH" type="text" placeholder="/path/to/workspace">
-          </div>
-          <div class="field">
-            <label for="cfg-GOOGLE_CREDENTIALS_PATH">Google Credentials Path</label>
-            <input id="cfg-GOOGLE_CREDENTIALS_PATH" type="text" placeholder="/path/to/credentials.json">
-          </div>
-        </div>
-
-        <!-- Integrations --------------------------------------------------- -->
-        <div class="settings-section">
-          <h3>Integrations</h3>
-          <div class="field">
-            <label for="cfg-NOTION_API_KEY">Notion API Key</label>
-            <div class="flex-row">
-              <input id="cfg-NOTION_API_KEY" type="password" autocomplete="off">
-              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-NOTION_API_KEY">show</button>
-            </div>
-          </div>
-          <div class="field">
-            <label for="cfg-WEB_SEARCH_API_KEY">Web Search API Key</label>
-            <div class="flex-row">
-              <input id="cfg-WEB_SEARCH_API_KEY" type="password" autocomplete="off">
-              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-WEB_SEARCH_API_KEY">show</button>
-            </div>
-          </div>
-          <div class="field">
-            <label for="cfg-OPENWEATHER_API_KEY">OpenWeather API Key</label>
-            <div class="flex-row">
-              <input id="cfg-OPENWEATHER_API_KEY" type="password" autocomplete="off">
-              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENWEATHER_API_KEY">show</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Telegram ------------------------------------------------------- -->
-        <div class="settings-section">
-          <h3>Telegram</h3>
-          <div class="field-row">
-            <div class="field">
-              <label for="cfg-TELEGRAM_BOT_TOKEN">Bot Token</label>
-              <div class="flex-row">
-                <input id="cfg-TELEGRAM_BOT_TOKEN" type="password" autocomplete="off">
-                <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-TELEGRAM_BOT_TOKEN">show</button>
-              </div>
-            </div>
-            <div class="field">
-              <label for="cfg-TELEGRAM_CHAT_ID">Chat ID</label>
-              <input id="cfg-TELEGRAM_CHAT_ID" type="text" placeholder="Your Telegram chat ID">
-            </div>
-          </div>
-        </div>
-
-        <!-- Workflows ------------------------------------------------------ -->
-        <div class="settings-section">
-          <h3>Workflows</h3>
-          <div class="field">
-            <label for="cfg-NOVA_WORKFLOWS">Workflows</label>
-            <select id="cfg-NOVA_WORKFLOWS">
-              <option value="on">on</option>
-              <option value="off">off</option>
+            <label for="cfg-MODEL_PROVIDER">Provider</label>
+            <select id="cfg-MODEL_PROVIDER">
+              <option value="ollama">Ollama</option>
+              <option value="openrouter">OpenRouter</option>
             </select>
-            <div class="hint">Enables morning briefing, digest, and dreaming consolidation.</div>
+          </div>
+          <div class="field">
+            <label for="cfg-DEFAULT_MODEL">Default Model</label>
+            <input id="cfg-DEFAULT_MODEL" type="text" placeholder="e.g. gemma3:4b">
           </div>
         </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="cfg-COMPLEX_MODEL">Complex Model</label>
+            <input id="cfg-COMPLEX_MODEL" type="text" placeholder="e.g. qwen2.5:72b">
+          </div>
+          <div class="field">
+            <label for="cfg-EMBED_MODEL">Embed Model</label>
+            <input id="cfg-EMBED_MODEL" type="text" placeholder="e.g. nomic-embed-text">
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfg-OLLAMA_HOST">Ollama Host</label>
+          <input id="cfg-OLLAMA_HOST" type="text" placeholder="http://localhost:11434">
+        </div>
+        <div class="field">
+          <label for="cfg-OPENROUTER_API_KEY">OpenRouter API Key</label>
+          <div class="flex-row">
+            <input id="cfg-OPENROUTER_API_KEY" type="password" autocomplete="off">
+            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENROUTER_API_KEY">show</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfg-NOVA_WORKFLOWS">Workflows</label>
+          <select id="cfg-NOVA_WORKFLOWS">
+            <option value="on">Enabled</option>
+            <option value="off">Disabled</option>
+          </select>
+          <div class="hint">Morning briefing, digest &amp; dreaming consolidation</div>
+        </div>
+      </div>
 
-      </div><!-- /.settings-body -->
+      <!-- Tab: Database -->
+      <div id="stab-database" class="settings-tab-body" style="display:none">
+        <div class="field-row">
+          <div class="field">
+            <label for="cfg-DATABASE_TYPE">Type</label>
+            <select id="cfg-DATABASE_TYPE">
+              <option value="local">Local (PGlite)</option>
+              <option value="supabase">Supabase</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="cfg-PGLITE_PATH">PGlite Path</label>
+            <input id="cfg-PGLITE_PATH" type="text" placeholder="./data/db">
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfg-SUPABASE_URL">Supabase URL</label>
+          <input id="cfg-SUPABASE_URL" type="text" placeholder="https://xxx.supabase.co">
+        </div>
+        <div class="field">
+          <label for="cfg-SUPABASE_SERVICE_ROLE_KEY">Service Role Key</label>
+          <div class="flex-row">
+            <input id="cfg-SUPABASE_SERVICE_ROLE_KEY" type="password" autocomplete="off">
+            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-SUPABASE_SERVICE_ROLE_KEY">show</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Workspace -->
+      <div id="stab-workspace" class="settings-tab-body" style="display:none">
+        <div class="field">
+          <label for="cfg-NOVA_WORKSPACE_PATH">Workspace Path</label>
+          <input id="cfg-NOVA_WORKSPACE_PATH" type="text" placeholder="/path/to/workspace">
+        </div>
+        <div class="field">
+          <label for="cfg-GOOGLE_CREDENTIALS_PATH">Google Credentials Path</label>
+          <input id="cfg-GOOGLE_CREDENTIALS_PATH" type="text" placeholder="/path/to/credentials.json">
+        </div>
+      </div>
+
+      <!-- Tab: Integrations -->
+      <div id="stab-integrations" class="settings-tab-body" style="display:none">
+        <div class="field">
+          <label for="cfg-NOTION_API_KEY">Notion API Key</label>
+          <div class="flex-row">
+            <input id="cfg-NOTION_API_KEY" type="password" autocomplete="off">
+            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-NOTION_API_KEY">show</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfg-WEB_SEARCH_API_KEY">Web Search API Key</label>
+          <div class="flex-row">
+            <input id="cfg-WEB_SEARCH_API_KEY" type="password" autocomplete="off">
+            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-WEB_SEARCH_API_KEY">show</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfg-OPENWEATHER_API_KEY">OpenWeather API Key</label>
+          <div class="flex-row">
+            <input id="cfg-OPENWEATHER_API_KEY" type="password" autocomplete="off">
+            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENWEATHER_API_KEY">show</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="cfg-TELEGRAM_BOT_TOKEN">Telegram Bot Token</label>
+            <div class="flex-row">
+              <input id="cfg-TELEGRAM_BOT_TOKEN" type="password" autocomplete="off">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-TELEGRAM_BOT_TOKEN">show</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="cfg-TELEGRAM_CHAT_ID">Telegram Chat ID</label>
+            <input id="cfg-TELEGRAM_CHAT_ID" type="text" placeholder="Your Telegram chat ID">
+          </div>
+        </div>
+      </div>
 
       <div class="settings-footer">
-        <button id="settings-save-btn" class="btn btn-primary" type="button">Save Settings</button>
+        <button id="settings-save-btn" class="btn btn-primary" type="button">Save</button>
         <span id="settings-status"></span>
-        <span class="restart-note ml-auto">Some changes require a server restart.</span>
+        <span class="restart-note ml-auto">Some changes need a restart</span>
       </div>
     </div><!-- #panel-settings -->
 

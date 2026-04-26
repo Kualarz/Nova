@@ -24,6 +24,11 @@ export async function failTask(id: string, error: string): Promise<void> {
   await db.updateTask({ id, status: 'error', error });
 }
 
+export async function deleteTask(id: string): Promise<void> {
+  const db = await getDb();
+  await db.deleteTask(id);
+}
+
 export async function listRecentTasks(limit = 11): Promise<Task[]> {
   const db = await getDb();
   const config = getConfig();

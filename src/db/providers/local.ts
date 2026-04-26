@@ -238,6 +238,11 @@ export class LocalProvider implements DatabaseProvider {
     );
   }
 
+  async deleteTask(id: string): Promise<void> {
+    const db = await this.getDb();
+    await db.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+  }
+
   async listTasks(userId: string, limit: number): Promise<Task[]> {
     const db = await this.getDb();
     const result = await db.query<Task>(
