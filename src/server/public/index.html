@@ -353,13 +353,16 @@
           </div>
           <div class="field">
             <label for="cfg-DEFAULT_MODEL">Default Model</label>
-            <input id="cfg-DEFAULT_MODEL" type="text" placeholder="e.g. gemma3:4b">
+            <div class="flex-row">
+              <select id="cfg-DEFAULT_MODEL" style="flex:1"><option value="">Loading…</option></select>
+              <button class="btn btn-sm" id="reload-models-btn" type="button" title="Refresh model list">↻</button>
+            </div>
           </div>
         </div>
         <div class="field-row">
           <div class="field">
             <label for="cfg-COMPLEX_MODEL">Complex Model</label>
-            <input id="cfg-COMPLEX_MODEL" type="text" placeholder="e.g. qwen2.5:72b">
+            <select id="cfg-COMPLEX_MODEL"><option value="">None (same as default)</option></select>
           </div>
           <div class="field">
             <label for="cfg-EMBED_MODEL">Embed Model</label>

@@ -762,12 +762,52 @@ document.querySelectorAll('.stab').forEach(tab => {
   });
 });
 
+async function loadSettingsModels(provider, savedDefault, savedComplex) {
+  const selDefault = document.getElementById('cfg-DEFAULT_MODEL');
+  const selComplex = document.getElementById('cfg-COMPLEX_MODEL');
+  if (!selDefault) return;
+
+  selDefault.innerHTML = '<option value="">Loading…</option>';
+  selDefault.disabled = true;
+  if (selComplex) { selComplex.innerHTML = '<option value="">None (same as default)</option>'; selComplex.disabled = true; }
+
+  try {
+    const url = provider ? `/api/models?provider=${encodeURIComponent(provider)}` : '/api/models';
+    const data = await apiFetch(url);
+    const models = data.models || [];
+
+    if (!models.length) {
+      selDefault.innerHTML = '<option value="">No models found</option>';
+      selDefault.disabled = false;
+      if (selComplex) selComplex.disabled = false;
+      return;
+    }
+
+    const opts = models.map(m => {
+      const display = (m.label && m.label !== m.name) ? m.label : shortModelName(m.name);
+      return `<option value="${escapeHtml(m.name)}">${escapeHtml(display)}</option>`;
+    }).join('');
+
+    selDefault.innerHTML = opts;
+    selDefault.disabled = false;
+    if (selComplex) {
+      selComplex.innerHTML = `<option value="">None (same as default)</option>${opts}`;
+      selComplex.disabled = false;
+    }
+
+    if (savedDefault) selDefault.value = savedDefault;
+    if (savedComplex && selComplex) selComplex.value = savedComplex;
+  } catch (e) {
+    selDefault.innerHTML = '<option value="">Failed to load — is server running?</option>';
+    selDefault.disabled = false;
+    if (selComplex) selComplex.disabled = false;
+  }
+}
+
 async function loadSettings() {
   try {
     const cfg = await apiFetch('/api/settings');
     setField('MODEL_PROVIDER',           cfg.MODEL_PROVIDER);
-    setField('DEFAULT_MODEL',            cfg.DEFAULT_MODEL);
-    setField('COMPLEX_MODEL',            cfg.COMPLEX_MODEL);
     setField('EMBED_MODEL',              cfg.EMBED_MODEL);
     setField('OLLAMA_HOST',              cfg.OLLAMA_HOST);
     setField('OPENROUTER_API_KEY',       cfg.OPENROUTER_API_KEY);
@@ -783,10 +823,23 @@ async function loadSettings() {
     setField('TELEGRAM_BOT_TOKEN',       cfg.TELEGRAM_BOT_TOKEN);
     setField('TELEGRAM_CHAT_ID',         cfg.TELEGRAM_CHAT_ID);
     setField('NOVA_WORKFLOWS',           cfg.NOVA_WORKFLOWS);
+    await loadSettingsModels(cfg.MODEL_PROVIDER, cfg.DEFAULT_MODEL, cfg.COMPLEX_MODEL);
   } catch (e) {
     setSettingsStatus('Failed to load: ' + e.message, 'error');
   }
 }
+
+// Re-fetch models when provider changes
+document.getElementById('cfg-MODEL_PROVIDER').addEventListener('change', function () {
+  loadSettingsModels(this.value, '', '');
+});
+
+document.getElementById('reload-models-btn').addEventListener('click', () => {
+  const provider = document.getElementById('cfg-MODEL_PROVIDER').value;
+  const cur = document.getElementById('cfg-DEFAULT_MODEL').value;
+  const curC = document.getElementById('cfg-COMPLEX_MODEL')?.value || '';
+  loadSettingsModels(provider, cur, curC);
+});
 
 function setField(id, value) {
   const el = document.getElementById('cfg-' + id);

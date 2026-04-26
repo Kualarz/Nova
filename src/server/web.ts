@@ -216,12 +216,13 @@ export function startWebServer(port = 3000): void {
     }
   });
 
-  app.get('/api/models', async (_req, res) => {
+  app.get('/api/models', async (req, res) => {
     try {
       const config = getConfig();
+      const qp = req.query.provider as string | undefined;
+      const provider = (qp === 'openrouter' || qp === 'ollama') ? qp : config.MODEL_PROVIDER;
 
-      if (config.MODEL_PROVIDER === 'openrouter') {
-        // Fetch live model list from OpenRouter and filter to free models
+      if (provider === 'openrouter') {
         const resp = await fetch('https://openrouter.ai/api/v1/models', {
           headers: { Authorization: `Bearer ${config.OPENROUTER_API_KEY}` },
         });
