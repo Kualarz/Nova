@@ -385,15 +385,19 @@ export function startWebServer(port = 3000): void {
         } catch (err) {
           const raw = (err as Error).message ?? '';
           let friendly = raw;
-          if (raw.includes('404')) {
-            const cfg = getConfig();
+          const cfg = getConfig();
+          if (raw.includes('429')) {
+            // Extract upstream reason if present
+            const metaMatch = raw.match(/"raw"\s*:\s*"([^"]+)"/);
+            const reason = metaMatch ? metaMatch[1] : 'This model is temporarily rate-limited.';
+            friendly = `Rate limited (429): ${reason}\n\nTip: Switch to a different free model using the model picker below, e.g. deepseek/deepseek-chat-v3-0324:free or meta-llama/llama-3.3-70b-instruct:free`;
+          } else if (raw.includes('404')) {
             if (cfg.MODEL_PROVIDER === 'openrouter') {
-              friendly = `Model not found on OpenRouter: "${cfg.DEFAULT_MODEL}". Select a different model in Settings.`;
+              friendly = `Model not found on OpenRouter: "${session.model ?? cfg.DEFAULT_MODEL}". Select a different model in Settings or the model picker.`;
             } else {
               friendly = `Model not found in Ollama (404). Run: ollama pull ${cfg.DEFAULT_MODEL}\n\nThen restart the server.`;
             }
           } else if (raw.includes('ECONNREFUSED') || raw.includes('fetch failed')) {
-            const cfg = getConfig();
             if (cfg.MODEL_PROVIDER === 'openrouter') {
               friendly = `Cannot reach OpenRouter. Check your internet connection or API key in Settings.`;
             } else {
