@@ -157,6 +157,65 @@ html, body {
 .sidebar-user-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
 .sidebar-user-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-user-role { font-size: 11px; color: var(--dimmer); }
+.sidebar-user-chevron { color: var(--dimmer); margin-left: auto; flex-shrink: 0; transition: transform 200ms ease; }
+.sidebar-user.open .sidebar-user-chevron { transform: rotate(180deg); }
+button.sidebar-user {
+  width: 100%; text-align: left; border: none;
+  background: none; cursor: pointer; font-family: var(--font-sans);
+}
+
+/* ── User menu popup ─────────────────────────────────────────────────────────── */
+.user-menu {
+  position: fixed;
+  background: #1d1d1d;
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 6px;
+  width: 240px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
+  z-index: 400;
+  animation: menuIn 120ms ease;
+}
+.user-menu.hidden { display: none; }
+
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.user-menu-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px 10px;
+}
+.user-menu-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0;
+}
+.user-menu-name  { font-size: 13px; font-weight: 500; color: var(--text); }
+.user-menu-email { font-size: 11px; color: var(--dimmer); margin-top: 1px; }
+
+.user-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+.user-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px; border-radius: 8px;
+  background: none; border: none; cursor: pointer;
+  color: var(--dim); font-family: var(--font-sans); font-size: 13px;
+  text-align: left;
+  transition: background var(--transition), color var(--transition);
+}
+.user-menu-item:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+.user-menu-item.danger { color: var(--red); }
+.user-menu-item.danger:hover { background: rgba(239,68,68,0.1); color: var(--red); }
+.user-menu-item span:first-of-type { flex: 1; }
+.user-menu-shortcut {
+  font-size: 11px; color: var(--dimmer);
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px; border-radius: 4px;
+  font-family: var(--font-mono); white-space: nowrap;
+}
 
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
 

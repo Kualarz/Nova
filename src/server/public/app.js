@@ -36,6 +36,86 @@ document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('collapsed');
 });
 
+// ── User menu popup ───────────────────────────────────────────────────────────
+const userMenu    = document.getElementById('user-menu');
+const userBtn     = document.getElementById('sidebar-user-btn');
+let userMenuOpen  = false;
+
+function openUserMenu() {
+  const rect = userBtn.getBoundingClientRect();
+  userMenu.style.left   = rect.left + 'px';
+  userMenu.style.width  = rect.width + 'px';
+  userMenu.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+  userMenu.classList.remove('hidden');
+  userBtn.classList.add('open');
+  userMenuOpen = true;
+}
+
+function closeUserMenu() {
+  userMenu.classList.add('hidden');
+  userBtn.classList.remove('open');
+  userMenuOpen = false;
+}
+
+userBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  userMenuOpen ? closeUserMenu() : openUserMenu();
+});
+
+document.addEventListener('click', () => closeUserMenu());
+userMenu.addEventListener('click', e => e.stopPropagation());
+
+// Settings
+document.getElementById('um-settings').addEventListener('click', () => {
+  closeUserMenu();
+  switchPanel('settings');
+});
+
+// About NOVA
+document.getElementById('um-about').addEventListener('click', () => {
+  closeUserMenu();
+  switchPanel('status');
+});
+
+// Get help — open a chat message pre-filled
+document.getElementById('um-help').addEventListener('click', () => {
+  closeUserMenu();
+  switchPanel('chat');
+  const input = document.getElementById('chat-input');
+  input.value = 'Hey NOVA, what can you help me with?';
+  input.focus();
+});
+
+// Quick nav
+document.getElementById('um-stats').addEventListener('click', () => { closeUserMenu(); switchPanel('status'); });
+document.getElementById('um-memory').addEventListener('click', () => { closeUserMenu(); switchPanel('memory'); });
+document.getElementById('um-workspace').addEventListener('click', () => { closeUserMenu(); switchPanel('workspace'); });
+
+// Reconnect AI — close WS so it auto-reconnects
+document.getElementById('um-reconnect').addEventListener('click', () => {
+  closeUserMenu();
+  if (ws) { ws.close(); }
+});
+
+// Clear session
+document.getElementById('um-clear').addEventListener('click', () => {
+  closeUserMenu();
+  document.getElementById('chat-messages').innerHTML = '';
+  _hasMessages = false;
+  setWelcome(true);
+  clearAttachments();
+  if (ws) ws.close();
+  switchPanel('chat');
+});
+
+// Ctrl+, shortcut → Settings
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+    e.preventDefault();
+    switchPanel('settings');
+  }
+});
+
 // ── Sidebar search ────────────────────────────────────────────────────────────
 let searchVisible = false;
 document.getElementById('sidebar-search-btn').addEventListener('click', e => {
