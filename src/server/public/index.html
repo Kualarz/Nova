@@ -404,14 +404,18 @@
 
       <!-- Tab: AI -->
       <div id="stab-ai" class="settings-tab-body">
+        <div class="field">
+          <label for="cfg-MODEL_PROVIDER">Provider</label>
+          <select id="cfg-MODEL_PROVIDER">
+            <option value="ollama">Ollama (local, free)</option>
+            <option value="openrouter">OpenRouter (free models)</option>
+            <option value="anthropic">Anthropic Claude (paid)</option>
+          </select>
+          <div class="hint" id="provider-hint"></div>
+        </div>
+
+        <!-- Common: model dropdowns (always visible) -->
         <div class="field-row">
-          <div class="field">
-            <label for="cfg-MODEL_PROVIDER">Provider</label>
-            <select id="cfg-MODEL_PROVIDER">
-              <option value="ollama">Ollama</option>
-              <option value="openrouter">OpenRouter</option>
-            </select>
-          </div>
           <div class="field">
             <label for="cfg-DEFAULT_MODEL">Default Model</label>
             <div class="flex-row">
@@ -419,28 +423,55 @@
               <button class="btn btn-sm" id="reload-models-btn" type="button" title="Refresh model list">↻</button>
             </div>
           </div>
-        </div>
-        <div class="field-row">
           <div class="field">
             <label for="cfg-COMPLEX_MODEL">Complex Model</label>
             <select id="cfg-COMPLEX_MODEL"><option value="">None (same as default)</option></select>
           </div>
+        </div>
+
+        <!-- Ollama-specific section -->
+        <div class="provider-section" data-provider="ollama">
+          <div class="field">
+            <label for="cfg-OLLAMA_HOST">Ollama Host</label>
+            <input id="cfg-OLLAMA_HOST" type="text" placeholder="http://localhost:11434">
+            <div class="hint">URL of your local Ollama server</div>
+          </div>
           <div class="field">
             <label for="cfg-EMBED_MODEL">Embed Model</label>
-            <input id="cfg-EMBED_MODEL" type="text" placeholder="e.g. nomic-embed-text">
+            <select id="cfg-EMBED_MODEL">
+              <option value="nomic-embed-text">nomic-embed-text (default)</option>
+              <option value="mxbai-embed-large">mxbai-embed-large</option>
+              <option value="all-minilm">all-minilm</option>
+              <option value="snowflake-arctic-embed">snowflake-arctic-embed</option>
+            </select>
+            <div class="hint">For semantic memory search. Run: <code>ollama pull &lt;model&gt;</code></div>
           </div>
         </div>
-        <div class="field">
-          <label for="cfg-OLLAMA_HOST">Ollama Host</label>
-          <input id="cfg-OLLAMA_HOST" type="text" placeholder="http://localhost:11434">
-        </div>
-        <div class="field">
-          <label for="cfg-OPENROUTER_API_KEY">OpenRouter API Key</label>
-          <div class="flex-row">
-            <input id="cfg-OPENROUTER_API_KEY" type="password" autocomplete="off">
-            <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENROUTER_API_KEY">show</button>
+
+        <!-- OpenRouter-specific section -->
+        <div class="provider-section" data-provider="openrouter">
+          <div class="field">
+            <label for="cfg-OPENROUTER_API_KEY">OpenRouter API Key</label>
+            <div class="flex-row">
+              <input id="cfg-OPENROUTER_API_KEY" type="password" autocomplete="off" placeholder="sk-or-v1-…">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-OPENROUTER_API_KEY">show</button>
+            </div>
+            <div class="hint">Get a free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a></div>
           </div>
         </div>
+
+        <!-- Anthropic-specific section -->
+        <div class="provider-section" data-provider="anthropic">
+          <div class="field">
+            <label for="cfg-ANTHROPIC_API_KEY">Anthropic API Key</label>
+            <div class="flex-row">
+              <input id="cfg-ANTHROPIC_API_KEY" type="password" autocomplete="off" placeholder="sk-ant-api03-…">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-ANTHROPIC_API_KEY">show</button>
+            </div>
+            <div class="hint">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com</a> · paid usage</div>
+          </div>
+        </div>
+
         <div class="field">
           <label for="cfg-NOVA_WORKFLOWS">Workflows</label>
           <select id="cfg-NOVA_WORKFLOWS">

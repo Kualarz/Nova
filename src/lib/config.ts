@@ -12,7 +12,7 @@ const ConfigSchema = z.object({
   NOVA_WORKSPACE_PATH: z.string().min(1, 'NOVA_WORKSPACE_PATH is required'),
 
   // AI providers — Ollama is default (free, local)
-  MODEL_PROVIDER: z.enum(['ollama', 'openrouter']).default('ollama'),
+  MODEL_PROVIDER: z.enum(['ollama', 'openrouter', 'anthropic']).default('ollama'),
   DEFAULT_MODEL: z.string().default('gemma3:4b'),
   COMPLEX_MODEL: z.string().default(''),
   EMBED_MODEL: z.string().default('nomic-embed-text'),

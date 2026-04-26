@@ -953,6 +953,12 @@ button.sidebar-user {
 .flex-row input { flex: 1; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+/* Provider-specific settings sections — toggled via .visible */
+.provider-section { display: none; padding-top: 4px; }
+.provider-section.visible { display: block; }
+.provider-section .field { margin-top: 14px; }
+.hint code { font-family: var(--font-mono); font-size: 11px; background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 3px; }
+
 .settings-footer {
   padding: 14px 24px;
   border-top: 1px solid var(--border);

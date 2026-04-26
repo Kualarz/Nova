@@ -51,7 +51,7 @@ const SECRET_KEYS = new Set([
 // Keys the settings form is allowed to overwrite
 const WRITABLE_KEYS = new Set([
   'MODEL_PROVIDER', 'DEFAULT_MODEL', 'COMPLEX_MODEL', 'EMBED_MODEL',
-  'OLLAMA_HOST', 'OPENROUTER_API_KEY',
+  'OLLAMA_HOST', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY',
   'DATABASE_TYPE', 'PGLITE_PATH',
   'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'NOVA_WORKSPACE_PATH',
@@ -221,7 +221,16 @@ export function startWebServer(port = 3000): void {
     try {
       const config = getConfig();
       const qp = req.query.provider as string | undefined;
-      const provider = (qp === 'openrouter' || qp === 'ollama') ? qp : config.MODEL_PROVIDER;
+      const provider = (qp === 'openrouter' || qp === 'ollama' || qp === 'anthropic') ? qp : config.MODEL_PROVIDER;
+
+      if (provider === 'anthropic') {
+        const models = [
+          { name: 'claude-opus-4-7',           label: 'Claude Opus 4.7',   size: 0 },
+          { name: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6', size: 0 },
+          { name: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  size: 0 },
+        ];
+        return res.json({ models, current: config.DEFAULT_MODEL, provider: 'anthropic' });
+      }
 
       if (provider === 'openrouter') {
         const resp = await fetch('https://openrouter.ai/api/v1/models', {
@@ -414,8 +423,16 @@ export function startWebServer(port = 3000): void {
             } else {
               friendly = `Model not found in Ollama (404). Run: ollama pull ${cfg.DEFAULT_MODEL}\n\nThen restart the server.`;
             }
+          } else if (raw.includes('401') || raw.includes('403')) {
+            if (cfg.MODEL_PROVIDER === 'anthropic') {
+              friendly = `Invalid Anthropic API key. Check ANTHROPIC_API_KEY in Settings.`;
+            } else if (cfg.MODEL_PROVIDER === 'openrouter') {
+              friendly = `Invalid OpenRouter API key. Check OPENROUTER_API_KEY in Settings.`;
+            }
           } else if (raw.includes('ECONNREFUSED') || raw.includes('fetch failed')) {
-            if (cfg.MODEL_PROVIDER === 'openrouter') {
+            if (cfg.MODEL_PROVIDER === 'anthropic') {
+              friendly = `Cannot reach Anthropic. Check your internet connection or API key in Settings.`;
+            } else if (cfg.MODEL_PROVIDER === 'openrouter') {
               friendly = `Cannot reach OpenRouter. Check your internet connection or API key in Settings.`;
             } else {
               friendly = `Cannot reach Ollama at ${cfg.OLLAMA_HOST}. Make sure Ollama is running.`;
