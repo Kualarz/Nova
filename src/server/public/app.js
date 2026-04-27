@@ -633,6 +633,7 @@ async function loadStatus() {
         { key: 'WEB_SEARCH_API_KEY',      name: 'Web Search' },
         { key: 'OPENWEATHER_API_KEY',     name: 'Weather' },
         { key: 'TELEGRAM_BOT_TOKEN',      name: 'Telegram' },
+        { key: 'DISCORD_BOT_TOKEN',       name: 'Discord' },
       ];
       const integHtml = checks.map(c => {
         const connected = cfg[c.key] && String(cfg[c.key]).length > 0;
@@ -1988,6 +1989,8 @@ async function loadSettings() {
     setField('OPENWEATHER_API_KEY',      cfg.OPENWEATHER_API_KEY);
     setField('TELEGRAM_BOT_TOKEN',       cfg.TELEGRAM_BOT_TOKEN);
     setField('TELEGRAM_CHAT_ID',         cfg.TELEGRAM_CHAT_ID);
+    setField('DISCORD_BOT_TOKEN',        cfg.DISCORD_BOT_TOKEN);
+    setField('DISCORD_USER_ID',          cfg.DISCORD_USER_ID);
     setField('NOVA_WORKFLOWS',           cfg.NOVA_WORKFLOWS);
     setField('PROFILE_NAME',             cfg.PROFILE_NAME);
     setField('PROFILE_BACKGROUND',       cfg.PROFILE_BACKGROUND);
@@ -2091,7 +2094,8 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     'OPENROUTER_API_KEY','ANTHROPIC_API_KEY','GROQ_API_KEY','DATABASE_TYPE','PGLITE_PATH','SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY','NOVA_WORKSPACE_PATH','GOOGLE_CREDENTIALS_PATH',
     'NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY',
-    'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','NOVA_WORKFLOWS',
+    'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID',
+    'DISCORD_BOT_TOKEN','DISCORD_USER_ID','NOVA_WORKFLOWS',
     'PROFILE_NAME','PROFILE_BACKGROUND','PROFILE_STYLE',
     'PROFILE_FULL_NAME','PROFILE_NICKNAME','PROFILE_WORK','PROFILE_PREFERENCES',
   ];
@@ -2211,7 +2215,7 @@ document.getElementById('connect-modal-confirm').addEventListener('click', async
 });
 
 async function triggerSettingsSave() {
-  const fields = ['NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'];
+  const fields = ['NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','DISCORD_BOT_TOKEN','DISCORD_USER_ID'];
   const body = {};
   for (const f of fields) {
     const el = document.getElementById('cfg-' + f);
@@ -2310,6 +2314,7 @@ document.getElementById('plus-connectors')?.addEventListener('click', e => {
         { key: 'WEB_SEARCH_API_KEY',      name: 'Web Search' },
         { key: 'OPENWEATHER_API_KEY',     name: 'Weather' },
         { key: 'TELEGRAM_BOT_TOKEN',      name: 'Telegram' },
+        { key: 'DISCORD_BOT_TOKEN',       name: 'Discord' },
         { key: 'GOOGLE_CREDENTIALS_PATH', name: 'Google' },
       ];
       sm.innerHTML = connectors.map(c => {
@@ -2519,6 +2524,7 @@ async function loadCustomizeConnectors() {
       { key: 'WEB_SEARCH_API_KEY',      name: 'Web Search',      icon: '🔍' },
       { key: 'OPENWEATHER_API_KEY',     name: 'OpenWeather',     icon: '☀️' },
       { key: 'TELEGRAM_BOT_TOKEN',      name: 'Telegram',        icon: '✈️' },
+      { key: 'DISCORD_BOT_TOKEN',       name: 'Discord',         icon: '💬' },
     ];
     const connected = connectors.filter(c => cfg[c.key] && String(cfg[c.key]).length > 0);
     const disconnected = connectors.filter(c => !(cfg[c.key] && String(cfg[c.key]).length > 0));

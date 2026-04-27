@@ -54,6 +54,33 @@ async function main(): Promise<void> {
     console.log('[telegram] skipped — set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to enable');
   }
 
+  // --- Discord channel (optional — skipped if token not set) ---
+  let stopDiscord: () => Promise<void> = async () => {};
+  if (config.DISCORD_BOT_TOKEN && config.DISCORD_USER_ID) {
+    try {
+      const { getDiscordChannel } = await import('./channels/discord.js');
+      const discord = getDiscordChannel();
+
+      discord.onMessage(async (text: string) => {
+        console.log(`[discord] ← ${text.slice(0, 80)}`);
+        try {
+          const response = await runPrompt(text);
+          await discord.sendMessage(response);
+          console.log(`[discord] → ${response.slice(0, 80)}`);
+        } catch (err) {
+          await discord.sendMessage(`[error] ${(err as Error).message}`);
+        }
+      });
+
+      await discord.start();
+      stopDiscord = () => discord.stop();
+    } catch (err) {
+      console.warn('[discord] failed to start:', (err as Error).message);
+    }
+  } else {
+    console.log('[discord] skipped — set DISCORD_BOT_TOKEN + DISCORD_USER_ID to enable');
+  }
+
   // --- Schedulers ---
   startHeartbeat(send);
   startDreaming();
@@ -75,6 +102,7 @@ async function main(): Promise<void> {
       stopWorkflows();
       stopWebServer();
       await stopTelegram();
+      await stopDiscord();
       await logEvent('server_stop', { reason });
     } catch {
       // best-effort

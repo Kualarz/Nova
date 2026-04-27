@@ -38,6 +38,10 @@ const ConfigSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().default(''),
   TELEGRAM_CHAT_ID: z.string().default(''),
 
+  // Phase 4.5 — Discord channel
+  DISCORD_BOT_TOKEN: z.string().default(''),
+  DISCORD_USER_ID: z.string().default(''),
+
   // Phase 3 — server options
   NOVA_WORKFLOWS: z.enum(['on', 'off']).default('on'),
 

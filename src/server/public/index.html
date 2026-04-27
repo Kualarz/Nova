@@ -990,6 +990,16 @@
             </div>
             <button class="btn connect-btn" data-key="TELEGRAM_BOT_TOKEN" data-name="Telegram" data-doc="https://core.telegram.org/bots#how-do-i-create-a-bot">Connect</button>
           </div>
+
+          <!-- Discord -->
+          <div class="connect-card" data-service="discord">
+            <div class="connect-card-icon">💬</div>
+            <div class="connect-card-body">
+              <div class="connect-card-name">Discord</div>
+              <div class="connect-card-desc">Chat with NOVA via Discord DMs (set both DISCORD_BOT_TOKEN and DISCORD_USER_ID)</div>
+            </div>
+            <button class="btn connect-btn" data-key="DISCORD_BOT_TOKEN" data-name="Discord" data-doc="https://discord.com/developers/applications">Connect</button>
+          </div>
         </div>
 
         <!-- Hidden inputs (for save handler — values mirrored from cards) -->
@@ -999,6 +1009,8 @@
           <input id="cfg-OPENWEATHER_API_KEY" type="password">
           <input id="cfg-TELEGRAM_BOT_TOKEN" type="password">
           <input id="cfg-TELEGRAM_CHAT_ID" type="text">
+          <input id="cfg-DISCORD_BOT_TOKEN" type="password">
+          <input id="cfg-DISCORD_USER_ID" type="text">
         </div>
       </div>
 
