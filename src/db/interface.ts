@@ -160,6 +160,16 @@ export interface DatabaseProvider {
   deleteProject(id: string): Promise<void>;
   listProjectConversations(projectId: string): Promise<Array<{ id: string; started_at: string; ended_at: string | null; first_message: string | null }>>;
   linkConversationToProject(conversationId: string, projectId: string | null): Promise<void>;
+  getConversationProjectId(conversationId: string): Promise<string | null>;
+
+  // Project memories
+  getLatestProjectMemory(projectId: string): Promise<{ id: string; content: string; source: string; created_at: string } | null>;
+  insertProjectMemory(projectId: string, content: string, source: string): Promise<string>;
+  listProjectsForCron(userId: string, sinceHours: number): Promise<Array<{ id: string; name: string }>>;
+
+  // Connector permissions
+  listConnectorPermissions(userId: string, connector?: string): Promise<Array<{ connector: string; tool: string; permission: string }>>;
+  setConnectorPermission(userId: string, connector: string, tool: string, permission: 'always-allow' | 'needs-approval' | 'never'): Promise<void>;
 
   // Stats
   getSessionStats(userId: string): Promise<SessionStats>;

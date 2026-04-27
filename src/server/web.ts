@@ -20,6 +20,7 @@ import * as http from 'http';
 import { fileURLToPath } from 'url';
 import * as path from 'path';
 import * as fs from 'fs';
+import cron from 'node-cron';
 import { getConfig, resetConfig } from '../lib/config.js';
 import { resetModelRouter } from '../providers/router.js';
 import { getDb, resetDb } from '../db/client.js';
@@ -29,7 +30,12 @@ import { buildBaseSystemPrompt } from '../agent/system-prompt.js';
 import { startConversation, appendMessage, endConversation } from '../conversations/store.js';
 import { extractMemories } from '../memory/extract.js';
 import { reconcileMemories } from '../memory/reconcile.js';
+import { CONNECTOR_CATALOG, defaultPermission } from '../connectors/catalog.js';
 import type { Message } from '../providers/interface.js';
+
+function getProjectFilesDir(workspacePath: string, projectId: string): string {
+  return path.join(workspacePath, 'projects', projectId, 'files');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -368,6 +374,102 @@ export function startWebServer(port = 3000): void {
     } catch (err) { res.status(500).json({ error: (err as Error).message }); }
   });
 
+  // ── Project memory ──────────────────────────────────────────────────────────
+  app.get('/api/projects/:id/memory', async (req, res) => {
+    try {
+      const db = await getDb();
+      const memory = await db.getLatestProjectMemory(req.params.id);
+      res.json(memory);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/projects/:id/memory/regenerate', async (req, res) => {
+    try {
+      const { synthesizeProjectMemory } = await import('../memory/project-synthesis.js');
+      const result = await synthesizeProjectMemory(req.params.id, 'chat-end');
+      res.json({ ok: true, synthesis: result });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  // ── Project files (workspace/projects/<id>/files/) ──────────────────────────
+  app.get('/api/projects/:id/files', (req, res) => {
+    try {
+      const config = getConfig();
+      const dir = getProjectFilesDir(config.NOVA_WORKSPACE_PATH, req.params.id);
+      if (!fs.existsSync(dir)) return res.json([]);
+      const files = fs.readdirSync(dir).map(name => {
+        const stats = fs.statSync(path.join(dir, name));
+        return { name, size: stats.size, modified: stats.mtime.toISOString() };
+      });
+      res.json(files);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/projects/:id/files', (req, res) => {
+    try {
+      const config = getConfig();
+      const dir = getProjectFilesDir(config.NOVA_WORKSPACE_PATH, req.params.id);
+      fs.mkdirSync(dir, { recursive: true });
+      const { name, content } = req.body as { name?: string; content?: string };
+      if (!name || content === undefined) return res.status(400).json({ error: 'name + content required' });
+      const safe = name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      fs.writeFileSync(path.join(dir, safe), content, 'utf8');
+      res.json({ ok: true, name: safe });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.delete('/api/projects/:id/files/:name', (req, res) => {
+    try {
+      const config = getConfig();
+      const dir = getProjectFilesDir(config.NOVA_WORKSPACE_PATH, req.params.id);
+      const safe = req.params.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const p = path.join(dir, safe);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  // ── Connector catalog + permissions ─────────────────────────────────────────
+  app.get('/api/connectors/catalog', (_req, res) => {
+    res.json(CONNECTOR_CATALOG);
+  });
+
+  app.get('/api/connectors/:id/permissions', async (req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const def = CONNECTOR_CATALOG.find(c => c.id === req.params.id);
+      if (!def) return res.status(404).json({ error: 'Unknown connector' });
+      const stored = await db.listConnectorPermissions(config.NOVA_USER_ID, req.params.id);
+      const result = def.tools.map(t => {
+        const found = stored.find(s => s.tool === t.name);
+        return {
+          ...t,
+          permission: found?.permission ?? defaultPermission(t.type),
+        };
+      });
+      res.json(result);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/connectors/:id/permissions', async (req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const { tool, permission } = req.body as { tool?: string; permission?: string };
+      if (!tool || !['always-allow', 'needs-approval', 'never'].includes(permission ?? '')) {
+        return res.status(400).json({ error: 'tool + permission required (always-allow|needs-approval|never)' });
+      }
+      await db.setConnectorPermission(
+        config.NOVA_USER_ID,
+        req.params.id,
+        tool,
+        permission as 'always-allow' | 'needs-approval' | 'never'
+      );
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
   app.get('/api/workspace', (_req, res) => {
     try {
       const config = getConfig();
@@ -628,6 +730,19 @@ export function startWebServer(port = 3000): void {
             }
           }
           await endConversation(session.conversationId);
+
+          // If this conversation is linked to a project, fire-and-forget
+          // a project-memory synthesis so the right rail stays fresh.
+          try {
+            const db = await getDb();
+            const projectId = await db.getConversationProjectId(session.conversationId);
+            if (projectId) {
+              const { synthesizeProjectMemory } = await import('../memory/project-synthesis.js');
+              void synthesizeProjectMemory(projectId, 'chat-end');
+            }
+          } catch {
+            // best-effort
+          }
         } catch {
           // best-effort
         }
@@ -637,6 +752,24 @@ export function startWebServer(port = 3000): void {
 
   server.listen(port, () => {
     console.log(`[web] http://localhost:${port}`);
+  });
+
+  // Nightly project memory synthesis at 3 AM
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      console.log('[cron] Running nightly project memory synthesis');
+      const config = getConfig();
+      const db = await getDb();
+      const projects = await db.listProjectsForCron(config.NOVA_USER_ID, 24);
+      const { synthesizeProjectMemory } = await import('../memory/project-synthesis.js');
+      for (const p of projects) {
+        console.log(`[cron] Synthesizing project ${p.name}`);
+        await synthesizeProjectMemory(p.id, 'nightly-cron');
+      }
+      console.log(`[cron] Done — ${projects.length} projects synthesized`);
+    } catch (err) {
+      console.error('[cron] Failed:', (err as Error).message);
+    }
   });
 
   _server = server;

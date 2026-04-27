@@ -272,6 +272,24 @@ export class SupabaseProvider implements DatabaseProvider {
   async linkConversationToProject(_conversationId: string, _projectId: string | null): Promise<void> {
     throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
   }
+  async getConversationProjectId(_conversationId: string): Promise<string | null> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async getLatestProjectMemory(_projectId: string): Promise<{ id: string; content: string; source: string; created_at: string } | null> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async insertProjectMemory(_projectId: string, _content: string, _source: string): Promise<string> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async listProjectsForCron(_userId: string, _sinceHours: number): Promise<Array<{ id: string; name: string }>> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async listConnectorPermissions(_userId: string, _connector?: string): Promise<Array<{ connector: string; tool: string; permission: string }>> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async setConnectorPermission(_userId: string, _connector: string, _tool: string, _permission: 'always-allow' | 'needs-approval' | 'never'): Promise<void> {
+    throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
 
   async runMigrations(): Promise<void> {
     // Supabase migrations are run manually via Supabase dashboard or CLI

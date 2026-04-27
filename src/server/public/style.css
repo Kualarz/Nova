@@ -1381,6 +1381,26 @@ button.sidebar-user {
 .rail-files-empty { text-align: center; padding: 24px 8px; color: var(--dimmer); }
 .rail-files-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.5; }
 
+/* Right-rail memory card */
+.rail-memory-content { font-size: 12.5px; line-height: 1.5; color: var(--text); white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+.rail-memory-meta { font-size: 11px; color: var(--dimmer); margin-top: 8px; }
+
+/* Right-rail file items */
+.rail-file-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.rail-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.rail-file-size { color: var(--dimmer); font-size: 11px; }
+.rail-file-remove { background: none; border: none; color: var(--dimmer); cursor: pointer; padding: 0 4px; font-size: 16px; }
+.rail-file-remove:hover { color: var(--red); }
+
+/* Per-tool connector permissions */
+.tool-permissions-section { margin-bottom: 24px; }
+.tool-perms-header { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text); padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.tool-perms-count { font-size: 11px; color: var(--dimmer); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 8px; }
+.tool-perm-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 14px; }
+.tool-perm-name { font-size: 13px; color: var(--text); }
+.tool-perm-id { font-size: 11px; color: var(--dimmer); margin-top: 2px; font-family: var(--font-mono, ui-monospace, monospace); }
+.tool-perm-select { background: rgba(255,255,255,0.05); border: 1px solid var(--border2); color: var(--text); padding: 4px 8px; border-radius: 6px; font-size: 12px; min-width: 130px; }
+
 .project-3dot-menu {
   position: absolute; top: calc(100% + 4px); right: 0;
   background: #1d1d1d; border: 1px solid var(--border2);

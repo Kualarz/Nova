@@ -90,6 +90,11 @@ async function runTurn(
         try {
           const toolInput = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
           console.log(chalk.dim(`  [tool] ${toolCall.function.name}(${toolCall.function.arguments})`));
+          // TODO(phase3b): consult connector_permissions before executing.
+          // If permission='never', short-circuit and return a refusal string.
+          // If permission='needs-approval', emit a WS approval request and
+          // await the user's decision before running. Phase 3 stores+displays
+          // permissions only — enforcement is deferred.
           toolOutput = await executeTool(toolCall.function.name, toolInput);
         } catch (err) {
           toolOutput = `Error: ${(err as Error).message}`;

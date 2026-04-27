@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -233,6 +233,73 @@ export class LocalProvider implements DatabaseProvider {
   async linkConversationToProject(conversationId: string, projectId: string | null): Promise<void> {
     const db = await this.getDb();
     await db.query(`UPDATE conversations SET project_id = $1 WHERE id = $2`, [projectId, conversationId]);
+  }
+
+  async getConversationProjectId(conversationId: string): Promise<string | null> {
+    const db = await this.getDb();
+    const r = await db.query<{ project_id: string | null }>(
+      `SELECT project_id FROM conversations WHERE id = $1`,
+      [conversationId]
+    );
+    return r.rows[0]?.project_id ?? null;
+  }
+
+  async getLatestProjectMemory(projectId: string): Promise<{ id: string; content: string; source: string; created_at: string } | null> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string; content: string; source: string; created_at: string }>(
+      `SELECT id, content, source, created_at FROM project_memories WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [projectId]
+    );
+    return r.rows[0] ?? null;
+  }
+
+  async insertProjectMemory(projectId: string, content: string, source: string): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO project_memories (project_id, content, source) VALUES ($1, $2, $3) RETURNING id`,
+      [projectId, content, source]
+    );
+    return r.rows[0]!.id;
+  }
+
+  async listProjectsForCron(userId: string, sinceHours: number): Promise<Array<{ id: string; name: string }>> {
+    const db = await this.getDb();
+    // sinceHours is a number we control; safe to interpolate
+    const hours = Math.max(1, Math.floor(sinceHours));
+    const r = await db.query<{ id: string; name: string }>(
+      `SELECT DISTINCT p.id, p.name FROM projects p
+       JOIN conversations c ON c.project_id = p.id
+       WHERE p.user_id = $1
+         AND (c.started_at > (now() - interval '${hours} hours')::text
+              OR c.ended_at  > (now() - interval '${hours} hours')::text)`,
+      [userId]
+    );
+    return r.rows;
+  }
+
+  async listConnectorPermissions(userId: string, connector?: string): Promise<Array<{ connector: string; tool: string; permission: string }>> {
+    const db = await this.getDb();
+    if (connector) {
+      const r = await db.query<{ connector: string; tool: string; permission: string }>(
+        `SELECT connector, tool, permission FROM connector_permissions WHERE user_id = $1 AND connector = $2`,
+        [userId, connector]
+      );
+      return r.rows;
+    }
+    const r = await db.query<{ connector: string; tool: string; permission: string }>(
+      `SELECT connector, tool, permission FROM connector_permissions WHERE user_id = $1`,
+      [userId]
+    );
+    return r.rows;
+  }
+
+  async setConnectorPermission(userId: string, connector: string, tool: string, permission: 'always-allow' | 'needs-approval' | 'never'): Promise<void> {
+    const db = await this.getDb();
+    await db.query(
+      `INSERT INTO connector_permissions (user_id, connector, tool, permission) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, connector, tool) DO UPDATE SET permission = EXCLUDED.permission`,
+      [userId, connector, tool, permission]
+    );
   }
 
   async getConversationMessages(conversationId: string): Promise<ConversationMessage[]> {

@@ -1240,23 +1240,124 @@ function renderProjectDetail() {
     instBody.textContent = p.instructions
       ? p.instructions.slice(0, 120) + (p.instructions.length > 120 ? '…' : '')
       : "Add instructions to tailor NOVA's responses";
+    instBody.style.color = p.instructions ? 'var(--text)' : 'var(--dim)';
   }
 
   const list = document.getElementById('project-chats-list');
   if (!p.conversations || !p.conversations.length) {
     list.innerHTML = '<div class="project-chats-empty" style="padding:24px;text-align:center;font-size:12.5px;color:var(--dimmer)">No chats yet. Use the input above to start one.</div>';
-    return;
+  } else {
+    list.innerHTML = p.conversations.map(c => {
+      const title = c.first_message ? c.first_message.slice(0, 80).replace(/\n/g, ' ') : 'Untitled';
+      return `
+        <div class="project-chat-row" data-id="${escapeHtml(c.id)}">
+          <div class="project-chat-title">${escapeHtml(title)}</div>
+          <div class="project-chat-meta">${fmtAge(c.started_at)}</div>
+        </div>
+      `;
+    }).join('');
   }
-  list.innerHTML = p.conversations.map(c => {
-    const title = c.first_message ? c.first_message.slice(0, 80).replace(/\n/g, ' ') : 'Untitled';
-    return `
-      <div class="project-chat-row" data-id="${escapeHtml(c.id)}">
-        <div class="project-chat-title">${escapeHtml(title)}</div>
-        <div class="project-chat-meta">${fmtAge(c.started_at)}</div>
-      </div>
-    `;
-  }).join('');
+
+  // Load right-rail memory + files
+  loadProjectMemory(p.id);
+  loadProjectFiles(p.id);
 }
+
+async function loadProjectMemory(projectId) {
+  const body = document.getElementById('rail-memory-body');
+  if (!body) return;
+  try {
+    const memory = await apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/memory');
+    if (memory && memory.content) {
+      body.innerHTML = `
+        <div class="rail-memory-content">${escapeHtml(memory.content)}</div>
+        <div class="rail-memory-meta">Updated ${fmtAge(memory.created_at)} · ${escapeHtml(memory.source)}</div>
+      `;
+    } else {
+      body.innerHTML = `
+        <div style="color:var(--dimmer);font-size:12px">No memory yet. Chat in this project and a synthesis will appear after the conversation ends.</div>
+        <button class="btn btn-sm" id="rail-memory-regen-btn" style="margin-top:10px">Generate now</button>
+      `;
+      document.getElementById('rail-memory-regen-btn')?.addEventListener('click', async () => {
+        body.innerHTML = '<div style="color:var(--dim)">Generating…</div>';
+        try {
+          const result = await apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/memory/regenerate', { method: 'POST' });
+          if (result.synthesis) {
+            body.innerHTML = `<div class="rail-memory-content">${escapeHtml(result.synthesis)}</div><div class="rail-memory-meta">Just now · manual</div>`;
+          } else {
+            body.innerHTML = '<div style="color:var(--dimmer);font-size:12px">No content to synthesize yet — start chatting in this project.</div>';
+          }
+        } catch (e) {
+          body.innerHTML = `<div style="color:var(--red);font-size:12px">Failed: ${escapeHtml(e.message)}</div>`;
+        }
+      });
+    }
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to load: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function loadProjectFiles(projectId) {
+  const body = document.getElementById('rail-files-body');
+  if (!body) return;
+  try {
+    const files = await apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/files');
+    if (!files.length) {
+      body.innerHTML = `<div class="rail-files-empty"><div class="rail-files-icon">📄</div>Add PDFs, documents, or other text to reference in this project.</div>`;
+      return;
+    }
+    body.innerHTML = files.map(f => `
+      <div class="rail-file-item" data-name="${escapeHtml(f.name)}">
+        <span class="rail-file-icon">📄</span>
+        <span class="rail-file-name">${escapeHtml(f.name)}</span>
+        <span class="rail-file-size">${(f.size / 1024).toFixed(1)} KB</span>
+        <button class="rail-file-remove" data-name="${escapeHtml(f.name)}">×</button>
+      </div>
+    `).join('');
+    body.querySelectorAll('.rail-file-remove').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Remove "${btn.dataset.name}" from this project?`)) return;
+        try {
+          await apiFetch('/api/projects/' + encodeURIComponent(projectId) + '/files/' + encodeURIComponent(btn.dataset.name), { method: 'DELETE' });
+          loadProjectFiles(projectId);
+        } catch (err) { alert(err.message); }
+      });
+    });
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--red);font-size:12px">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Wire the + button on the Files card
+document.getElementById('rail-files-add')?.addEventListener('click', e => {
+  e.stopPropagation();
+  if (!_currentProject) return;
+  let fileInput = document.getElementById('project-file-upload-input');
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'project-file-upload-input';
+    fileInput.style.display = 'none';
+    fileInput.accept = '.txt,.md,.pdf,.json,.csv,.html,.js,.ts,.py';
+    document.body.appendChild(fileInput);
+    fileInput.addEventListener('change', async function() {
+      if (!this.files[0] || !_currentProject) return;
+      const file = this.files[0];
+      try {
+        const content = await file.text();
+        await apiFetch('/api/projects/' + encodeURIComponent(_currentProject.id) + '/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: file.name, content }),
+        });
+        loadProjectFiles(_currentProject.id);
+      } catch (err) { alert('Upload failed: ' + err.message); }
+      this.value = '';
+    });
+  }
+  fileInput.click();
+});
 
 // Back button
 document.getElementById('project-back-btn')?.addEventListener('click', () => {
@@ -2100,6 +2201,95 @@ async function loadCustomizeSkills() {
   }
 }
 
+async function showConnectorDetail(envKeyOrId) {
+  const detail = document.getElementById('customize-connector-detail');
+  if (!detail) return;
+  detail.innerHTML = '<div style="padding:24px">Loading…</div>';
+  try {
+    const catalog = await apiFetch('/api/connectors/catalog');
+    // Match by id first, fall back to envKey lookup
+    let def = catalog.find(c => c.id === envKeyOrId);
+    if (!def) def = catalog.find(c => c.envKey === envKeyOrId);
+    if (!def) {
+      detail.innerHTML = `<div style="padding:24px;color:var(--dim)">No tool catalog defined for "${escapeHtml(envKeyOrId)}". Manage credentials in Settings → Integrations.</div>`;
+      return;
+    }
+
+    const tools = await apiFetch('/api/connectors/' + encodeURIComponent(def.id) + '/permissions');
+    const cfg = await apiFetch('/api/settings');
+    const isConnected = cfg[def.envKey] && String(cfg[def.envKey]).length > 0;
+
+    const readTools = tools.filter(t => t.type === 'read');
+    const writeTools = tools.filter(t => t.type !== 'read');
+
+    detail.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+        <div>
+          <h2 style="font-size:18px;font-weight:600;margin:0 0 4px">${escapeHtml(def.name)}</h2>
+          <div style="font-size:12.5px;color:var(--dim);margin-top:2px">${escapeHtml(def.description)}</div>
+        </div>
+        <button class="btn btn-sm" id="cstm-conn-toggle">${isConnected ? 'Disconnect' : 'Connect'}</button>
+      </div>
+
+      <h3 style="font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Tool permissions</h3>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Choose when NOVA is allowed to use these tools.</div>
+
+      ${readTools.length ? `
+        <div class="tool-permissions-section">
+          <div class="tool-perms-header">Read-only tools <span class="tool-perms-count">${readTools.length}</span></div>
+          ${readTools.map(t => permissionRowHtml(def.id, t)).join('')}
+        </div>
+      ` : ''}
+
+      ${writeTools.length ? `
+        <div class="tool-permissions-section">
+          <div class="tool-perms-header">Write/delete tools <span class="tool-perms-count">${writeTools.length}</span></div>
+          ${writeTools.map(t => permissionRowHtml(def.id, t)).join('')}
+        </div>
+      ` : ''}
+    `;
+
+    document.getElementById('cstm-conn-toggle')?.addEventListener('click', () => {
+      const oldBtn = document.querySelector(`.connect-btn[data-key="${def.envKey}"]`);
+      if (oldBtn) oldBtn.click();
+      else {
+        switchPanel('settings');
+        document.querySelector('.settings-nav-item[data-stab="integrations"]')?.click();
+      }
+    });
+
+    detail.querySelectorAll('.tool-perm-select').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        try {
+          await apiFetch('/api/connectors/' + encodeURIComponent(def.id) + '/permissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: sel.dataset.tool, permission: sel.value }),
+          });
+        } catch (err) { alert('Save failed: ' + err.message); }
+      });
+    });
+  } catch (e) {
+    detail.innerHTML = `<div style="padding:24px;color:var(--red)">Failed: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function permissionRowHtml(connectorId, t) {
+  return `
+    <div class="tool-perm-row">
+      <div>
+        <div class="tool-perm-name">${escapeHtml(t.description)}</div>
+        <div class="tool-perm-id">${escapeHtml(t.name)}</div>
+      </div>
+      <select class="tool-perm-select" data-tool="${escapeHtml(t.name)}">
+        <option value="always-allow" ${t.permission === 'always-allow' ? 'selected' : ''}>Always allow</option>
+        <option value="needs-approval" ${t.permission === 'needs-approval' ? 'selected' : ''}>Needs approval</option>
+        <option value="never" ${t.permission === 'never' ? 'selected' : ''}>Never</option>
+      </select>
+    </div>
+  `;
+}
+
 async function loadCustomizeConnectors() {
   const connectedEl = document.getElementById('customize-connected-list');
   const disconnectedEl = document.getElementById('customize-disconnected-list');
@@ -2123,12 +2313,7 @@ async function loadCustomizeConnectors() {
       item.addEventListener('click', () => {
         document.querySelectorAll('#customize-connectors .customize-list-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
-        const detail = document.getElementById('customize-connector-detail');
-        detail.innerHTML = `<div style="padding:20px"><h3 style="font-size:18px;margin-bottom:8px">${escapeHtml(item.textContent.trim())}</h3><p style="color:var(--dim);font-size:13px;margin-bottom:16px">Manage this connector in Settings → Integrations.</p><button class="btn btn-primary" id="customize-connector-goto">Open Settings</button></div>`;
-        document.getElementById('customize-connector-goto')?.addEventListener('click', () => {
-          switchPanel('settings');
-          document.querySelector('.settings-nav-item[data-stab="integrations"]')?.click();
-        });
+        showConnectorDetail(item.dataset.key);
       });
     });
   } catch {
