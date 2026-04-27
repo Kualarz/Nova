@@ -58,6 +58,7 @@ async function runTurn(
   opts: {
     model?: string;
     requestApproval?: (tool: string, args: unknown, description: string) => Promise<boolean>;
+    onToolCall?: (name: string, args: unknown, result: string, status: 'success' | 'error' | 'blocked') => Promise<void>;
   } = {}
 ): Promise<{ text: string; newMessages: Message[]; modelUsed?: string }> {
   const tools = toApiTools();
@@ -90,8 +91,11 @@ async function runTurn(
 
       for (const toolCall of response.tool_calls) {
         let toolOutput: string;
+        let toolStatus: 'success' | 'error' | 'blocked' = 'success';
+        let parsedArgs: unknown = null;
         try {
           const toolInput = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+          parsedArgs = toolInput;
           console.log(chalk.dim(`  [tool] ${toolCall.function.name}(${toolCall.function.arguments})`));
           // Phase 3b: executeTool now consults connector_permissions.
           // `requestApproval` (when provided) lets it pause for user
@@ -99,8 +103,20 @@ async function runTurn(
           toolOutput = await executeTool(toolCall.function.name, toolInput, {
             requestApproval: opts.requestApproval,
           });
+          if (toolOutput.startsWith('[blocked]') || toolOutput.startsWith('[denied]')) {
+            toolStatus = 'blocked';
+          }
         } catch (err) {
           toolOutput = `Error: ${(err as Error).message}`;
+          toolStatus = 'error';
+        }
+
+        if (opts.onToolCall) {
+          try {
+            await opts.onToolCall(toolCall.function.name, parsedArgs, toolOutput, toolStatus);
+          } catch {
+            // best-effort logging; never break the agent loop
+          }
         }
 
         const resultMsg: Message = {
@@ -165,6 +181,26 @@ export async function runWebTurn(
     requestApproval: opts.requestApproval,
   });
   return { ...result, modelUsed: chosenModel, modelReason: reason };
+}
+
+/**
+ * Routine execution path — runs the full agent loop (so tools fire) with
+ * an `onToolCall` hook for per-tool persistence. Auto-approves needs-approval
+ * tools since the user authored the routine when creating it.
+ */
+export async function runRoutine(
+  systemPrompt: string,
+  userPrompt: string,
+  opts: {
+    onToolCall?: (name: string, args: unknown, result: string, status: 'success' | 'error' | 'blocked') => Promise<void>;
+  } = {}
+): Promise<string> {
+  const history: Message[] = [{ role: 'user', content: userPrompt }];
+  const { text } = await runTurn(systemPrompt, history, {
+    requestApproval: () => Promise.resolve(true),
+    onToolCall: opts.onToolCall,
+  });
+  return text;
 }
 
 export async function runPrompt(userPrompt: string): Promise<string> {

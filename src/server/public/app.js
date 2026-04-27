@@ -1939,23 +1939,147 @@ async function viewRoutineDetail(id) {
       runsList.innerHTML = '<div style="color:var(--dimmer);font-size:12px">No runs yet</div>';
     } else {
       runsList.innerHTML = runs.map(r => `
-        <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:14px;align-items:center">
-          <span class="routine-card-status ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
-          <span style="color:var(--dim)">${fmtAge(r.started_at)}</span>
-          <span style="color:var(--dimmer)">${r.completed_at ? 'completed ' + fmtAge(r.completed_at) : 'in progress'}</span>
+        <div class="routine-run-row" data-run-id="${escapeHtml(r.id)}">
+          <div class="routine-run-header" style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:14px;align-items:center;cursor:pointer">
+            <span class="routine-card-status ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+            <span style="color:var(--dim)">${fmtAge(r.started_at)}</span>
+            <span style="color:var(--dimmer)">${r.completed_at ? 'completed ' + fmtAge(r.completed_at) : 'in progress'}</span>
+            <span style="margin-left:auto;color:var(--accent);font-size:11px">▾ tools</span>
+          </div>
+          <div class="routine-run-tools" style="display:none"></div>
         </div>
       `).join('');
+
+      runsList.querySelectorAll('.routine-run-row').forEach(row => {
+        const header = row.querySelector('.routine-run-header');
+        const tools  = row.querySelector('.routine-run-tools');
+        header.addEventListener('click', async () => {
+          if (tools.style.display === 'block') {
+            tools.style.display = 'none';
+            return;
+          }
+          if (!tools.dataset.loaded) {
+            tools.innerHTML = '<div style="padding:10px;color:var(--dimmer);font-size:11px">Loading…</div>';
+            try {
+              const calls = await apiFetch('/api/routines/runs/' + encodeURIComponent(row.dataset.runId) + '/tools');
+              if (!calls.length) {
+                tools.innerHTML = '<div style="padding:10px 16px;color:var(--dimmer);font-size:11px">No tool calls — this run was a single LLM response.</div>';
+              } else {
+                tools.innerHTML = calls.map((c, i) => `
+                  <div class="tool-call-row" style="padding:8px 16px;border-bottom:1px solid var(--border);font-size:11.5px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="color:var(--dimmer);width:18px">${i + 1}.</span>
+                      <span class="routine-card-status ${c.status === 'success' ? 'success' : (c.status === 'blocked' ? 'never' : 'error')}">${escapeHtml(c.status)}</span>
+                      <span style="color:var(--text);font-family:var(--font-mono)">${escapeHtml(c.tool_name)}</span>
+                    </div>
+                    ${c.tool_args ? `<details style="margin-top:4px;margin-left:26px"><summary style="cursor:pointer;color:var(--dim);font-size:10.5px">args</summary><pre style="background:rgba(255,255,255,0.04);padding:6px;border-radius:4px;font-size:10px;margin-top:2px;overflow-x:auto">${escapeHtml(c.tool_args)}</pre></details>` : ''}
+                    ${c.tool_result ? `<details style="margin-top:4px;margin-left:26px"><summary style="cursor:pointer;color:var(--dim);font-size:10.5px">result</summary><pre style="background:rgba(255,255,255,0.04);padding:6px;border-radius:4px;font-size:10px;margin-top:2px;overflow-x:auto;white-space:pre-wrap">${escapeHtml(c.tool_result)}</pre></details>` : ''}
+                  </div>
+                `).join('');
+              }
+              tools.dataset.loaded = '1';
+            } catch (e) {
+              tools.innerHTML = `<div style="padding:10px;color:var(--red);font-size:11px">Failed: ${escapeHtml(e.message)}</div>`;
+            }
+          }
+          tools.style.display = 'block';
+        });
+      });
     }
   } catch (e) { alert('Failed to load: ' + e.message); }
 }
 
 document.getElementById('routine-back-btn')?.addEventListener('click', loadRoutines);
 
+const WORKFLOW_TEMPLATES = [
+  {
+    name: 'Morning Inbox',
+    icon: '📧',
+    description: 'Reads important Gmail emails from the last 24h, summarizes them, sends a Telegram briefing',
+    cron: '0 8 * * 1-5',
+    prompt: `It's 8am. Please:
+1. Search my Gmail for emails from the last 24 hours.
+2. Pick the 5 most important ones (urgent, from people I know, requires action).
+3. Write a short summary of each (1-2 sentences).
+4. Send the summary to me via Telegram.
+
+Format the Telegram message as a list. Skip if nothing important.`
+  },
+  {
+    name: 'Weekly Retrospective',
+    icon: '📊',
+    description: 'Reviews my chats from the past 7 days, identifies themes, saves a retrospective',
+    cron: '0 18 * * 0',
+    prompt: `It's Sunday evening. Generate a weekly retrospective:
+1. Look at our conversations from the past 7 days.
+2. Identify 3-5 recurring themes or projects I worked on.
+3. Note any decisions made or commitments I expressed.
+4. List anything I said I'd follow up on but haven't yet.
+
+Format as a markdown document and save it to my workspace memory folder.`
+  },
+  {
+    name: 'Daily Weather',
+    icon: '☀️',
+    description: "Sends today's weather + 3-day forecast as a morning Telegram message",
+    cron: '30 7 * * *',
+    prompt: `Get today's weather forecast for my location, plus the next 3 days. Send a short Telegram message with:
+- Today's high/low and conditions
+- Whether to bring a jacket / umbrella
+- Anything notable in the 3-day outlook
+
+Keep it under 200 chars.`
+  },
+  {
+    name: 'News Digest',
+    icon: '📰',
+    description: 'Searches for top AI news, summarizes 3 stories, sends via Telegram',
+    cron: '0 9 * * *',
+    prompt: `Search the web for the top AI news from the last 24 hours. Pick 3 stories that matter most (new model releases, major company moves, important research). Write a 1-sentence summary of each. Send them to me on Telegram with a link to each.`
+  },
+  {
+    name: 'Hourly Heartbeat',
+    icon: '💓',
+    description: 'Quick check-in: anything urgent? Sends a Telegram only if there is something to report',
+    cron: '0 * * * *',
+    prompt: `Quick hourly check-in. Look at: my calendar (next 2 hours), recent emails (last hour), my recent memory entries. If there's anything I should know RIGHT NOW (urgent meeting, time-sensitive email, missed task), send me a short Telegram. If nothing urgent, do nothing — don't spam me.`
+  },
+  {
+    name: 'Memory Consolidation',
+    icon: '🧠',
+    description: 'Reviews recent memories, deduplicates, promotes important ones',
+    cron: '0 3 * * *',
+    prompt: `Look through my memories from the last 7 days. Identify any duplicates or near-duplicates and merge them. Identify the 3 most important new facts learned this week and make sure they're elevated to high-confidence. Don't change anything user-facing — just clean up.`
+  },
+];
+
+function populateWorkflowTemplates() {
+  const container = document.getElementById('workflow-templates');
+  if (!container) return;
+  container.innerHTML = WORKFLOW_TEMPLATES.map((t, i) => `
+    <button class="workflow-template" data-tpl-idx="${i}" type="button">
+      <div class="workflow-template-name">${t.icon} ${escapeHtml(t.name)}</div>
+      <div class="workflow-template-desc">${escapeHtml(t.description)}</div>
+    </button>
+  `).join('');
+  container.querySelectorAll('.workflow-template').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tpl = WORKFLOW_TEMPLATES[parseInt(btn.dataset.tplIdx, 10)];
+      document.getElementById('routine-name').value   = tpl.name;
+      document.getElementById('routine-desc').value   = tpl.description;
+      document.getElementById('routine-prompt').value = tpl.prompt;
+      document.getElementById('routine-cron').value   = tpl.cron;
+    });
+  });
+}
+
 const routineModal = document.getElementById('routine-modal');
 function openRoutineModal(id = null) {
   _editingRoutineId = id;
   document.getElementById('routine-modal-title').textContent = id ? 'Edit routine' : 'New routine';
+  const tplField = document.getElementById('routine-templates-field');
   if (id) {
+    if (tplField) tplField.style.display = 'none';
     const r = _routines.find(x => x.id === id);
     if (r) {
       document.getElementById('routine-name').value   = r.name;
@@ -1964,10 +2088,12 @@ function openRoutineModal(id = null) {
       document.getElementById('routine-cron').value   = r.cron_expr;
     }
   } else {
+    if (tplField) tplField.style.display = '';
     document.getElementById('routine-name').value   = '';
     document.getElementById('routine-desc').value   = '';
     document.getElementById('routine-prompt').value = '';
     document.getElementById('routine-cron').value   = '0 8 * * *';
+    populateWorkflowTemplates();
   }
   routineModal.style.display = 'flex';
   document.getElementById('routine-name').focus();

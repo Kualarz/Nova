@@ -589,6 +589,14 @@ export function startWebServer(port = 3000): void {
     } catch (err) { res.status(500).json({ error: (err as Error).message }); }
   });
 
+  app.get('/api/routines/runs/:runId/tools', async (req, res) => {
+    try {
+      const db = await getDb();
+      const calls = await db.listRoutineToolCalls(req.params.runId);
+      res.json(calls);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
   app.post('/api/routines/:id/run', async (req, res) => {
     try {
       const db = await getDb();

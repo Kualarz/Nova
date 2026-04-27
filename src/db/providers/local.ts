@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams, RoutineToolCall } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql', '010_routines.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql', '010_routines.sql', '011_routine_tool_calls.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -559,6 +559,25 @@ export class LocalProvider implements DatabaseProvider {
     const r = await db.query<RoutineRun>(
       `SELECT * FROM routine_runs WHERE routine_id = $1 ORDER BY started_at DESC LIMIT $2`,
       [routineId, limit]
+    );
+    return r.rows;
+  }
+
+  async insertRoutineToolCall(runId: string, toolName: string, toolArgs: string | null, toolResult: string | null, status: string): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO routine_tool_calls (run_id, tool_name, tool_args, tool_result, status)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [runId, toolName, toolArgs, toolResult ? toolResult.slice(0, 1000) : null, status]
+    );
+    return r.rows[0]!.id;
+  }
+
+  async listRoutineToolCalls(runId: string): Promise<RoutineToolCall[]> {
+    const db = await this.getDb();
+    const r = await db.query<RoutineToolCall>(
+      `SELECT * FROM routine_tool_calls WHERE run_id = $1 ORDER BY created_at ASC`,
+      [runId]
     );
     return r.rows;
   }

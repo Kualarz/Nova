@@ -141,6 +141,16 @@ export interface RoutineRun {
   error: string | null;
 }
 
+export interface RoutineToolCall {
+  id: string;
+  run_id: string;
+  tool_name: string;
+  tool_args: string | null;
+  tool_result: string | null;
+  status: string;
+  created_at: string;
+}
+
 export interface CreateRoutineParams {
   name: string;
   description?: string;
@@ -223,6 +233,8 @@ export interface DatabaseProvider {
   insertRoutineRun(routineId: string): Promise<string>;
   completeRoutineRun(id: string, status: string, output?: string, error?: string): Promise<void>;
   listRoutineRuns(routineId: string, limit: number): Promise<RoutineRun[]>;
+  insertRoutineToolCall(runId: string, toolName: string, toolArgs: string | null, toolResult: string | null, status: string): Promise<string>;
+  listRoutineToolCalls(runId: string): Promise<RoutineToolCall[]>;
 
   // Stats
   getSessionStats(userId: string): Promise<SessionStats>;

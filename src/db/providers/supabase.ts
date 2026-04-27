@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams, RoutineToolCall } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -313,6 +313,12 @@ export class SupabaseProvider implements DatabaseProvider {
     throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
   }
   async listRoutineRuns(_routineId: string, _limit: number): Promise<RoutineRun[]> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async insertRoutineToolCall(_runId: string, _toolName: string, _toolArgs: string | null, _toolResult: string | null, _status: string): Promise<string> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async listRoutineToolCalls(_runId: string): Promise<RoutineToolCall[]> {
     throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
   }
 

@@ -965,6 +965,32 @@ button.sidebar-user {
   padding: 60px 20px; text-align: center;
   color: var(--dimmer); font-size: 13px;
 }
+.workflow-templates {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 8px; margin-top: 6px;
+  max-height: 200px; overflow-y: auto;
+}
+.workflow-template {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 100ms;
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+.workflow-template:hover { background: rgba(255,255,255,0.06); }
+.workflow-template-name {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text); margin-bottom: 3px;
+  display: flex; align-items: center; gap: 6px;
+}
+.workflow-template-desc {
+  font-size: 11px; color: var(--dim);
+  line-height: 1.4;
+}
 .routines-body .hint code,
 .routines-list .hint code {
   background: rgba(255,255,255,0.08);

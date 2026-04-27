@@ -8,8 +8,8 @@
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { getDb } from '../db/client.js';
-import { getModelRouter } from '../providers/router.js';
 import { buildBaseSystemPrompt } from '../agent/system-prompt.js';
+import { runRoutine } from '../agent/nova.js';
 import type { Routine } from '../db/interface.js';
 
 const _scheduledTasks = new Map<string, ScheduledTask>();
@@ -21,16 +21,29 @@ export async function executeRoutine(routine: Routine): Promise<{ status: 'succe
 
   try {
     const systemPrompt = await buildBaseSystemPrompt();
-    const router = getModelRouter();
-    const resp = await router.chat(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: `[Routine: ${routine.name}]\n\n${routine.prompt}` },
-      ],
-      { temperature: 0.5 }
+
+    const onToolCall = async (
+      name: string,
+      args: unknown,
+      result: string,
+      status: 'success' | 'error' | 'blocked',
+    ) => {
+      try {
+        let argsStr: string | null;
+        try { argsStr = JSON.stringify(args).slice(0, 1000); } catch { argsStr = null; }
+        await db.insertRoutineToolCall(runId, name, argsStr, result, status);
+      } catch {
+        // best-effort logging — never break the run
+      }
+    };
+
+    const reply = await runRoutine(
+      systemPrompt,
+      `[Routine: ${routine.name}]\n\n${routine.prompt}`,
+      { onToolCall },
     );
 
-    const output = (resp.content ?? '').trim();
+    const output = (reply ?? '').trim();
     const truncated = output.slice(0, 2000);
 
     await db.completeRoutineRun(runId, 'success', output);
