@@ -494,8 +494,9 @@ export function startWebServer(port = 3000): void {
         if (!session) return;
 
         let text = '';
+        let adaptive = false;
         try {
-          const msg = JSON.parse(raw.toString()) as { type: string; text?: string; model?: string };
+          const msg = JSON.parse(raw.toString()) as { type: string; text?: string; model?: string; adaptive?: boolean };
           if (msg.type === 'set_model' && msg.model) {
             session.model = msg.model;
             ws.send(JSON.stringify({ type: 'model_set', model: msg.model }));
@@ -503,6 +504,7 @@ export function startWebServer(port = 3000): void {
           }
           if (msg.type !== 'message' || !msg.text?.trim()) return;
           text = msg.text.trim();
+          adaptive = msg.adaptive === true;
         } catch {
           return;
         }
@@ -513,7 +515,13 @@ export function startWebServer(port = 3000): void {
 
         try {
           await appendMessage(session.conversationId, { role: 'user', content: text });
-          const { text: reply, newMessages } = await runWebTurn(session.systemPrompt, session.history, text, { model: session.model });
+          const { text: reply, newMessages, modelUsed, modelReason } = await runWebTurn(
+            session.systemPrompt, session.history, text,
+            { model: session.model, adaptive }
+          );
+          if (modelUsed) {
+            ws.send(JSON.stringify({ type: 'model_used', model: modelUsed, reason: modelReason }));
+          }
 
           for (const m of newMessages) session.history.push(m);
           await appendMessage(session.conversationId, { role: 'assistant', content: reply });
@@ -569,11 +577,14 @@ export function startWebServer(port = 3000): void {
 
       void (async () => {
         try {
-          const transcript = buildHistoryTranscript(session.history);
-          if (transcript.trim()) {
-            const candidates = await extractMemories(transcript);
-            if (candidates.length > 0) {
-              await reconcileMemories(candidates, session.conversationId);
+          const cfg = getConfig();
+          if (cfg.MEMORY_GENERATE === 'on') {
+            const transcript = buildHistoryTranscript(session.history);
+            if (transcript.trim()) {
+              const candidates = await extractMemories(transcript);
+              if (candidates.length > 0) {
+                await reconcileMemories(candidates, session.conversationId);
+              }
             }
           }
           await endConversation(session.conversationId);

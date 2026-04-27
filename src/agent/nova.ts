@@ -31,11 +31,32 @@ function buildTranscript(history: Message[]): string {
     .join('\n');
 }
 
+/**
+ * Heuristic that flags prompts likely to benefit from a stronger model.
+ * Used by adaptive routing — when ON and a COMPLEX_MODEL is configured,
+ * prompts judged "complex" are routed there for the current turn only.
+ */
+export function isComplexPrompt(text: string): boolean {
+  const signals = [
+    text.length > 400,
+    /\b(analyze|design|architect|debug|why|explain|compare|plan|strategy|evaluate)\b/i.test(text),
+    /\?[\s\S]*\?/.test(text),
+    /\b(step.?by.?step|reason through|think through)\b/i.test(text),
+    /```/.test(text),
+    text.split('\n').length > 5,
+  ];
+  return signals.filter(Boolean).length >= 2;
+}
+
+// TODO: TOOL_LOAD_MODE not yet wired — agent always preloads all tools.
+// When the radio is "on-demand", we should expose a tool-discovery tool
+// and load others lazily on demand. For now both modes behave identically.
+
 async function runTurn(
   systemPrompt: string,
   history: Message[],
   opts: { model?: string } = {}
-): Promise<{ text: string; newMessages: Message[] }> {
+): Promise<{ text: string; newMessages: Message[]; modelUsed?: string }> {
   const tools = toApiTools();
   const added: Message[] = [];
   const router = getModelRouter();
@@ -52,7 +73,7 @@ async function runTurn(
       const text = response.content ?? '';
       const msg: Message = { role: 'assistant', content: text };
       added.push(msg);
-      return { text, newMessages: added };
+      return { text, newMessages: added, modelUsed: opts.model };
     }
 
     if (response.stop_reason === 'tool_calls' && response.tool_calls?.length) {
@@ -87,10 +108,10 @@ async function runTurn(
 
     const text = response.content ?? '';
     added.push({ role: 'assistant', content: text });
-    return { text, newMessages: added };
+    return { text, newMessages: added, modelUsed: opts.model };
   }
 
-  return { text: '[Max tool iterations reached]', newMessages: added };
+  return { text: '[Max tool iterations reached]', newMessages: added, modelUsed: opts.model };
 }
 
 /**
@@ -101,21 +122,47 @@ export async function runWebTurn(
   systemPrompt: string,
   history: Message[],
   userPrompt: string,
-  opts: { model?: string } = {}
-): Promise<{ text: string; newMessages: Message[] }> {
+  opts: { model?: string; adaptive?: boolean } = {}
+): Promise<{ text: string; newMessages: Message[]; modelUsed?: string; modelReason?: string }> {
   const userMsg: Message = { role: 'user', content: userPrompt };
-  return runTurn(systemPrompt, [...history, userMsg], opts);
+  const config = getConfig();
+
+  // Optionally inject relevant Tier 3 (semantic) memories for this turn.
+  let effectivePrompt = systemPrompt;
+  if (config.MEMORY_SEARCH === 'on') {
+    try {
+      const tier3 = await buildTier3Injection(userPrompt);
+      if (tier3) effectivePrompt = systemPrompt + '\n\n---\n\n' + tier3;
+    } catch {
+      // best-effort
+    }
+  }
+
+  // Adaptive routing: pick COMPLEX_MODEL for "hard" prompts when enabled.
+  let chosenModel = opts.model;
+  let reason: string | undefined;
+  if (opts.adaptive && config.COMPLEX_MODEL && isComplexPrompt(userPrompt)) {
+    chosenModel = config.COMPLEX_MODEL;
+    reason = 'adaptive: complex prompt';
+  } else if (opts.adaptive) {
+    reason = 'adaptive: default';
+  }
+
+  const result = await runTurn(effectivePrompt, [...history, userMsg], { model: chosenModel });
+  return { ...result, modelUsed: chosenModel, modelReason: reason };
 }
 
 export async function runPrompt(userPrompt: string): Promise<string> {
   const conversationId = await startConversation();
   let systemPrompt = await buildBaseSystemPrompt();
 
-  try {
-    const tier3 = await buildTier3Injection(userPrompt);
-    if (tier3) systemPrompt = systemPrompt + '\n\n---\n\n' + tier3;
-  } catch {
-    // best-effort
+  if (getConfig().MEMORY_SEARCH === 'on') {
+    try {
+      const tier3 = await buildTier3Injection(userPrompt);
+      if (tier3) systemPrompt = systemPrompt + '\n\n---\n\n' + tier3;
+    } catch {
+      // best-effort
+    }
   }
 
   const history: Message[] = [{ role: 'user', content: userPrompt }];
@@ -158,15 +205,17 @@ export async function runSession(): Promise<void> {
     console.log(chalk.dim('\nexiting...'));
     try {
       await fireHook('session.end').catch(() => {});
-      const transcript = buildTranscript(history);
-      if (transcript.trim()) {
-        const candidates = await extractMemories(transcript);
-        if (candidates.length > 0) {
-          await reconcileMemories(candidates, conversationId);
-          await logEvent('memory_extracted', {
-            conversation_id: conversationId,
-            count: candidates.length,
-          });
+      if (getConfig().MEMORY_GENERATE === 'on') {
+        const transcript = buildTranscript(history);
+        if (transcript.trim()) {
+          const candidates = await extractMemories(transcript);
+          if (candidates.length > 0) {
+            await reconcileMemories(candidates, conversationId);
+            await logEvent('memory_extracted', {
+              conversation_id: conversationId,
+              count: candidates.length,
+            });
+          }
         }
       }
       await endConversation(conversationId);
@@ -204,7 +253,7 @@ export async function runSession(): Promise<void> {
     await appendMessage(conversationId, { role: 'user', content: userInput });
     await logEvent('message', { conversation_id: conversationId, role: 'user' });
 
-    if (!tier3Injected) {
+    if (!tier3Injected && getConfig().MEMORY_SEARCH === 'on') {
       tier3Injected = true;
       try {
         const tier3 = await buildTier3Injection(userInput);
@@ -229,7 +278,7 @@ export async function runSession(): Promise<void> {
 
       // Periodic memory flush every FLUSH_EVERY turns
       turnCount++;
-      if (shouldFlush(turnCount)) {
+      if (shouldFlush(turnCount) && getConfig().MEMORY_GENERATE === 'on') {
         void flushMemories(buildTranscript(history), conversationId);
       }
     } catch (err) {

@@ -643,7 +643,8 @@ function sendChatMessage() {
   if (!text) return;
 
   appendChatMsg('user', input.value.trim() || '(attached file)');
-  ws.send(JSON.stringify({ type: 'message', text }));
+  const adaptive = localStorage.getItem('nova:adaptive-thinking') !== 'off';
+  ws.send(JSON.stringify({ type: 'message', text, adaptive }));
   input.value = '';
   input.style.height = 'auto';
 }
