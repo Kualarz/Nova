@@ -403,6 +403,18 @@ function renderConversations() {
         openConvMenu(el, id);
       });
     }
+    // Click anywhere else on the row → open the conversation history
+    el.addEventListener('click', e => {
+      // Ignore clicks on the more button (already handled above)
+      if (e.target.closest('.conv-more-btn')) return;
+      // Highlight selected
+      document.querySelectorAll('.conv-item').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+      // Load conversation history (defined later in app.js for Phase 5)
+      if (typeof loadConversationHistory === 'function') {
+        loadConversationHistory(id);
+      }
+    });
   });
 }
 
