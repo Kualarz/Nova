@@ -691,7 +691,15 @@ function appendChatMsg(role, text) {
 
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  bubble.textContent = text;
+
+  if (role === 'nova' && window.marked) {
+    bubble.classList.add('msg-rendered');
+    bubble.innerHTML = renderMarkdown(text);
+    enhanceCodeBlocks(bubble);
+  } else {
+    bubble.textContent = text;
+  }
+
   wrap.appendChild(bubble);
 
   const meta = document.createElement('div');
@@ -702,6 +710,99 @@ function appendChatMsg(role, text) {
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
   return wrap;
+}
+
+function renderMarkdown(text) {
+  if (!window.marked) return escapeHtml(text);
+  if (!window._markedConfigured) {
+    window.marked.setOptions({
+      breaks: true,
+      gfm: true,
+    });
+    window._markedConfigured = true;
+  }
+  try {
+    return window.marked.parse(text);
+  } catch {
+    return escapeHtml(text);
+  }
+}
+
+function enhanceCodeBlocks(container) {
+  container.querySelectorAll('pre code').forEach(codeEl => {
+    const pre = codeEl.parentElement;
+    if (!pre || pre.dataset.enhanced) return;
+    pre.dataset.enhanced = '1';
+
+    // Detect language from class="language-xxx"
+    let lang = 'text';
+    for (const cls of codeEl.classList) {
+      if (cls.startsWith('language-')) { lang = cls.slice(9); break; }
+    }
+
+    // Special-case diff
+    if (lang === 'diff') {
+      pre.classList.add('code-diff');
+      const html = codeEl.textContent
+        .split('\n')
+        .map(line => {
+          const safe = escapeHtml(line);
+          if (line.startsWith('+')) return `<span class="diff-add">${safe}</span>`;
+          if (line.startsWith('-')) return `<span class="diff-remove">${safe}</span>`;
+          if (line.startsWith('@@')) return `<span class="diff-hunk">${safe}</span>`;
+          return safe;
+        })
+        .join('\n');
+      codeEl.innerHTML = html;
+    } else if (window.hljs) {
+      try { window.hljs.highlightElement(codeEl); } catch {}
+    }
+
+    // Wrap pre in a code-block div with language badge + copy button
+    const wrap = document.createElement('div');
+    wrap.className = 'code-block-wrap';
+
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+
+    const langBadge = document.createElement('span');
+    langBadge.className = 'code-block-lang';
+    langBadge.textContent = lang;
+    header.appendChild(langBadge);
+
+    const actions = document.createElement('div');
+    actions.className = 'code-block-actions';
+
+    if (lang === 'bash' || lang === 'sh' || lang === 'shell' || lang === 'console') {
+      const runBtn = document.createElement('button');
+      runBtn.className = 'code-block-btn';
+      runBtn.title = 'Copy command (paste into your terminal)';
+      runBtn.innerHTML = '▶ Run';
+      runBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(codeEl.textContent).catch(() => {});
+        runBtn.innerHTML = '✓ Copied — paste in terminal';
+        setTimeout(() => runBtn.innerHTML = '▶ Run', 2000);
+      });
+      actions.appendChild(runBtn);
+    }
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'code-block-btn';
+    copyBtn.title = 'Copy code';
+    copyBtn.innerHTML = '⧉ Copy';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(codeEl.textContent).catch(() => {});
+      copyBtn.innerHTML = '✓ Copied';
+      setTimeout(() => copyBtn.innerHTML = '⧉ Copy', 1500);
+    });
+    actions.appendChild(copyBtn);
+
+    header.appendChild(actions);
+
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(header);
+    wrap.appendChild(pre);
+  });
 }
 
 let thinkingEl = null;
