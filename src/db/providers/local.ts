@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -150,6 +150,22 @@ export class LocalProvider implements DatabaseProvider {
     // Cascade: messages should already be ON DELETE CASCADE, but be safe
     await db.query(`DELETE FROM messages WHERE conversation_id = $1`, [id]);
     await db.query(`DELETE FROM conversations WHERE id = $1`, [id]);
+  }
+
+  async getOrCreateCompanionConversation(userId: string): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `SELECT id FROM conversations
+       WHERE user_id = $1 AND is_companion = 1
+       ORDER BY started_at DESC LIMIT 1`,
+      [userId]
+    );
+    if (r.rows[0]) return r.rows[0].id;
+    const c = await db.query<{ id: string }>(
+      `INSERT INTO conversations (user_id, is_companion) VALUES ($1, 1) RETURNING id`,
+      [userId]
+    );
+    return c.rows[0]!.id;
   }
 
   async listProjects(userId: string): Promise<ProjectWithStats[]> {

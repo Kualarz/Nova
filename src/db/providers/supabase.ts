@@ -125,6 +125,10 @@ export class SupabaseProvider implements DatabaseProvider {
     }));
   }
 
+  async getOrCreateCompanionConversation(_userId: string): Promise<string> {
+    throw new Error('Companion not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+
   async listConversations(userId: string, limit: number): Promise<ConversationSummary[]> {
     const { data, error } = await this.client
       .from('conversations')

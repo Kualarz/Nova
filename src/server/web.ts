@@ -126,6 +126,7 @@ interface ChatSession {
   history: Message[];
   systemPrompt: string;
   model?: string; // user-selected model override for this session
+  isCompanion?: boolean;
 }
 
 function buildHistoryTranscript(history: Message[]): string {
@@ -475,14 +476,48 @@ export function startWebServer(port = 3000): void {
     ]);
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     // Initialise session asynchronously
     void (async () => {
       try {
-        const conversationId = await withTimeout(startConversation(), 8000, 'startConversation (DB)');
-        const systemPrompt   = await withTimeout(buildBaseSystemPrompt(), 8000, 'buildBaseSystemPrompt');
-        sessions.set(ws, { conversationId, history: [], systemPrompt });
-        ws.send(JSON.stringify({ type: 'ready' }));
+        // Detect companion mode from query string (?mode=companion)
+        const url = new URL(req.url ?? '', 'http://x');
+        const isCompanion = url.searchParams.get('mode') === 'companion';
+
+        let conversationId: string;
+        let history: Message[] = [];
+
+        if (isCompanion) {
+          const config = getConfig();
+          const db = await withTimeout(getDb(), 8000, 'getDb (companion)');
+          conversationId = await withTimeout(
+            db.getOrCreateCompanionConversation(config.NOVA_USER_ID),
+            8000,
+            'getOrCreateCompanionConversation'
+          );
+          // Replay last 50 user/assistant messages so context survives.
+          // Tool rows are stored separately; ConversationMessage.role can be
+          // 'tool' so filter explicitly before casting to Message[].
+          const msgs = await withTimeout(
+            db.getConversationMessages(conversationId),
+            8000,
+            'getConversationMessages (companion)'
+          );
+          history = msgs
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .slice(-50)
+            .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+        } else {
+          conversationId = await withTimeout(startConversation(), 8000, 'startConversation (DB)');
+        }
+
+        const systemPrompt = await withTimeout(buildBaseSystemPrompt(), 8000, 'buildBaseSystemPrompt');
+        sessions.set(ws, { conversationId, history, systemPrompt, isCompanion });
+        ws.send(JSON.stringify({
+          type: 'ready',
+          companion: isCompanion,
+          historyLen: history.length,
+        }));
       } catch (err) {
         ws.send(JSON.stringify({ type: 'error', message: (err as Error).message }));
       }
@@ -574,6 +609,11 @@ export function startWebServer(port = 3000): void {
       const session = sessions.get(ws);
       sessions.delete(ws);
       if (!session) return;
+
+      // Companion sessions never "end" — they're the user's persistent
+      // relationship with NOVA. We keep the raw history and skip both
+      // memory extraction (the conversation IS the memory) and endConversation.
+      if (session.isCompanion) return;
 
       void (async () => {
         try {

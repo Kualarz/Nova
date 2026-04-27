@@ -1546,3 +1546,49 @@ button.sidebar-user {
   font-size: 13px; line-height: 1.6; color: var(--text);
   white-space: pre-wrap; max-width: 720px;
 }
+
+/* ── Phase 2: Voice input/output + Companion ─────────────────────────────── */
+
+/* Voice input recording state — pulsing red dot */
+.toolbar-icon-btn.recording {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red);
+  animation: voicePulse 1.2s ease-in-out infinite;
+}
+@keyframes voicePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+/* Voice output toggle — accent color when ON */
+.toolbar-icon-btn.voice-on { color: var(--accent); }
+.toolbar-icon-btn.voice-on .vo-waves { stroke: var(--accent); }
+
+/* Companion sidebar item — subtle gradient highlight */
+.nav-item-companion {
+  background: linear-gradient(90deg, rgba(167,139,250,0.1), rgba(167,139,250,0.02));
+  border: 1px solid rgba(167,139,250,0.2);
+}
+.nav-item-companion .companion-badge {
+  margin-left: auto;
+  color: var(--green);
+  font-size: 8px;
+  animation: voicePulse 2s ease-in-out infinite;
+}
+.nav-item-companion.active {
+  background: linear-gradient(90deg, rgba(167,139,250,0.2), rgba(167,139,250,0.05));
+}
+
+/* Companion banner inside chat panel */
+.companion-banner {
+  background: linear-gradient(90deg, rgba(167,139,250,0.15), rgba(167,139,250,0.05));
+  border-bottom: 1px solid rgba(167,139,250,0.2);
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.companion-banner span { color: var(--green); animation: voicePulse 2s ease-in-out infinite; }
+

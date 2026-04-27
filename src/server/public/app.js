@@ -8,6 +8,153 @@ let currentFile = null;
 let fileOriginal = '';
 let allMemories  = [];
 let currentPanel = 'chat';
+// Companion mode: when true, the WS uses ?mode=companion and the chat panel
+// shows a banner. Persisted across reconnects so onclose can decide whether
+// to reconnect to the companion conversation or a fresh one.
+let _isCompanionMode = false;
+
+// ── Voice input (Web Speech API) ──────────────────────────────────────────────
+// Browser-native; no server work. Click to start, click again or 3s of silence
+// to stop. Final transcript appears in the chat textarea so the user can edit
+// before sending.
+let _recognition  = null;
+let _silenceTimer = null;
+function startVoiceInput() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert('Voice input not supported in this browser. Use Chrome or Edge.');
+    return;
+  }
+  if (_recognition) { _recognition.stop(); _recognition = null; return; }
+
+  _recognition = new SR();
+  _recognition.continuous     = true;
+  _recognition.interimResults = true;
+  _recognition.lang           = navigator.language || 'en-US';
+
+  const input = document.getElementById('chat-input');
+  const btn   = document.getElementById('chat-voice-btn');
+  if (btn) btn.classList.add('recording');
+
+  let finalTranscript = input.value.trim();
+  if (finalTranscript) finalTranscript += ' ';
+
+  _recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTranscript += t + ' ';
+      else interim += t;
+    }
+    input.value = finalTranscript + interim;
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+
+    clearTimeout(_silenceTimer);
+    _silenceTimer = setTimeout(() => stopVoiceInput(), 3000);
+  };
+
+  _recognition.onerror = (e) => {
+    console.warn('Speech error:', e.error);
+    stopVoiceInput();
+  };
+
+  _recognition.onend = () => {
+    if (btn) btn.classList.remove('recording');
+    _recognition = null;
+    clearTimeout(_silenceTimer);
+  };
+
+  _recognition.start();
+}
+
+function stopVoiceInput() {
+  if (_recognition) {
+    try { _recognition.stop(); } catch {}
+  }
+  const btn = document.getElementById('chat-voice-btn');
+  if (btn) btn.classList.remove('recording');
+}
+
+// ── Voice output (Web Speech Synthesis) ───────────────────────────────────────
+function isVoiceOutputOn() {
+  return localStorage.getItem('nova:voice-output') === 'on';
+}
+function setVoiceOutput(on) {
+  localStorage.setItem('nova:voice-output', on ? 'on' : 'off');
+  const btn = document.getElementById('voice-output-toggle');
+  if (btn) btn.classList.toggle('voice-on', on);
+  if (!on && window.speechSynthesis) window.speechSynthesis.cancel();
+}
+function speakText(text) {
+  if (!isVoiceOutputOn() || !window.speechSynthesis) return;
+  // Strip markdown so TTS doesn't read out backticks, asterisks, code blocks.
+  const clean = String(text || '')
+    .replace(/```[\s\S]*?```/g, '. code block omitted. ')
+    .replace(/[*_`#>]/g, '')
+    .replace(/\n+/g, '. ')
+    .trim();
+  if (!clean) return;
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.rate  = 1.05;
+  utter.pitch = 1.0;
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find(v => /samantha|aria|natural|google/i.test(v.name)) || voices[0];
+  if (preferred) utter.voice = preferred;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utter);
+}
+
+// ── Companion mode helpers ────────────────────────────────────────────────────
+function showCompanionHeader(on) {
+  let banner = document.getElementById('companion-banner');
+  if (on) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'companion-banner';
+      banner.className = 'companion-banner';
+      banner.innerHTML = '<span>●</span> Companion mode — your persistent chat with NOVA';
+      const panel = document.getElementById('panel-chat');
+      if (panel) panel.prepend(banner);
+    }
+  } else if (banner) {
+    banner.remove();
+  }
+}
+
+function enterCompanionMode() {
+  _isCompanionMode = true;
+  switchPanel('chat');
+  // switchPanel made [data-panel="chat"] active — move that highlight to the
+  // Companion item so the sidebar visually reflects the current mode.
+  document.querySelector('.nav-item[data-panel="chat"]')?.classList.remove('active');
+  document.querySelector('.nav-item-companion')?.classList.add('active');
+  // Hide welcome unconditionally — even if companion has no history yet,
+  // the banner already explains the mode and the welcome screen would clash.
+  document.getElementById('chat-messages').innerHTML = '';
+  _hasMessages = true;
+  setWelcome(false);
+  showCompanionHeader(true);
+  reconnectWS(true);
+}
+
+async function fetchCompanionHistory() {
+  try {
+    const res = await fetch('/api/companion');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    document.getElementById('chat-messages').innerHTML = '';
+    for (const m of (data.messages || [])) {
+      if (m.role === 'user') appendChatMsg('user', m.content);
+      else if (m.role === 'assistant') appendChatMsg('nova', m.content);
+      // Tool messages are intentionally not rendered here.
+    }
+    _hasMessages = (data.messages || []).length > 0;
+    setWelcome(!_hasMessages);
+  } catch (e) {
+    console.warn('Failed to load companion history:', e);
+  }
+}
 
 // ── Panel navigation ──────────────────────────────────────────────────────────
 function switchPanel(name) {
@@ -47,13 +194,23 @@ document.querySelectorAll('.nav-item').forEach(item => {
       openSearchModal();
       return;
     }
+    if (target === 'companion') {
+      enterCompanionMode();
+      return;
+    }
     if (target === 'chat') {
-      // "New chat" — clear messages and reconnect
+      // Leaving companion mode? Drop the banner so the user knows they're
+      // back in a fresh, ephemeral chat.
+      if (_isCompanionMode) {
+        _isCompanionMode = false;
+        showCompanionHeader(false);
+      }
+      // "New chat" — clear messages and reconnect (fresh, non-companion)
       document.getElementById('chat-messages').innerHTML = '';
       _hasMessages = false;
       setWelcome(true);
       if (typeof clearAttachments === 'function') clearAttachments();
-      if (ws) ws.close();
+      reconnectWS(false);
     }
     switchPanel(target);
   });
@@ -141,20 +298,21 @@ document.getElementById('um-stats').addEventListener('click', () => { closeUserM
 document.getElementById('um-memory').addEventListener('click', () => { closeUserMenu(); switchPanel('memory'); });
 document.getElementById('um-workspace').addEventListener('click', () => { closeUserMenu(); switchPanel('workspace'); });
 
-// Reconnect AI — close WS so it auto-reconnects
+// Reconnect AI — close WS so it auto-reconnects (preserve companion mode)
 document.getElementById('um-reconnect').addEventListener('click', () => {
   closeUserMenu();
-  if (ws) { ws.close(); }
+  reconnectWS(_isCompanionMode);
 });
 
-// Clear session
+// Clear session — leaves companion mode and starts a fresh ephemeral chat
 document.getElementById('um-clear').addEventListener('click', () => {
   closeUserMenu();
+  if (_isCompanionMode) { _isCompanionMode = false; showCompanionHeader(false); }
   document.getElementById('chat-messages').innerHTML = '';
   _hasMessages = false;
   setWelcome(true);
   clearAttachments();
-  if (ws) ws.close();
+  reconnectWS(false);
   switchPanel('chat');
 });
 
@@ -584,9 +742,14 @@ function setChatStatus(msg, cls) {
 }
 
 // ── CHAT — WebSocket ──────────────────────────────────────────────────────────
+// connectWS reads `_isCompanionMode` so reconnects (manual or auto) land in the
+// same mode the user last selected. Pass a value to reconnectWS() instead of
+// mutating ws.close handlers — that avoids the stale-onclose race where a
+// previous connection's onclose fires 3s later and reconnects to the wrong mode.
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  const path  = _isCompanionMode ? '/ws?mode=companion' : '/ws';
+  ws = new WebSocket(`${proto}//${location.host}${path}`);
   setChatStatus('connecting…');
 
   ws.onopen = () => setChatStatus('connecting…');
@@ -595,14 +758,19 @@ function connectWS() {
     const msg = JSON.parse(e.data);
     if (msg.type === 'ready') {
       wsReady = true;
-      setChatStatus('connected', 'connected');
+      setChatStatus(msg.companion ? 'companion · connected' : 'connected', 'connected');
       document.getElementById('send-btn').disabled = false;
       loadModels(); // populate model selector on connect
+      if (msg.companion) {
+        // Server replays history — fetch and render it
+        fetchCompanionHistory();
+      }
     } else if (msg.type === 'thinking') {
       showThinking(true);
     } else if (msg.type === 'response') {
       showThinking(false);
       appendChatMsg('nova', msg.text);
+      speakText(msg.text);
     } else if (msg.type === 'error') {
       showThinking(false);
       appendChatMsg('error', msg.message);
@@ -621,6 +789,21 @@ function connectWS() {
   };
 
   ws.onerror = () => setChatStatus('connection error', 'error');
+}
+
+// Tear down the existing socket without triggering its auto-reconnect, then
+// open a fresh one in the requested mode. Used when toggling Companion ↔ New.
+function reconnectWS(companion) {
+  _isCompanionMode = !!companion;
+  if (ws) {
+    // Null out every handler so an in-flight message or close on the dying
+    // socket can't bleed into the fresh one we're about to open.
+    try { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); } catch {}
+    ws = null;
+  }
+  wsReady = false;
+  document.getElementById('send-btn').disabled = true;
+  connectWS();
 }
 
 // ── CHAT — send ───────────────────────────────────────────────────────────────
@@ -661,20 +844,22 @@ document.getElementById('chat-input').addEventListener('input', function() {
 });
 
 document.getElementById('clear-chat-btn').addEventListener('click', () => {
+  if (_isCompanionMode) { _isCompanionMode = false; showCompanionHeader(false); }
   document.getElementById('chat-messages').innerHTML = '';
   _hasMessages = false;
   setWelcome(true);
   clearAttachments();
-  if (ws) ws.close();
+  reconnectWS(false);
 });
 
 // New Chat button (sidebar) — same as clear
 document.getElementById('new-chat-btn').addEventListener('click', () => {
+  if (_isCompanionMode) { _isCompanionMode = false; showCompanionHeader(false); }
   document.getElementById('chat-messages').innerHTML = '';
   _hasMessages = false;
   setWelcome(true);
   clearAttachments();
-  if (ws) ws.close();
+  reconnectWS(false);
   switchPanel('chat');
 });
 
@@ -1950,6 +2135,14 @@ async function loadCustomizeConnectors() {
     connectedEl.innerHTML = '<div style="padding:6px 10px;color:var(--red);font-size:12px">Failed to load</div>';
   }
 }
+
+// ── Voice button wiring ───────────────────────────────────────────────────────
+document.getElementById('chat-voice-btn')?.addEventListener('click', startVoiceInput);
+document.getElementById('voice-output-toggle')?.addEventListener('click', () => {
+  setVoiceOutput(!isVoiceOutputOn());
+});
+// Restore persisted voice-output toggle on load
+setVoiceOutput(isVoiceOutputOn());
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 connectWS();

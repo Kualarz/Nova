@@ -131,6 +131,7 @@ export interface DatabaseProvider {
   deleteConversation(id: string): Promise<void>;
   getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
   listConversations(userId: string, limit: number): Promise<ConversationSummary[]>;
+  getOrCreateCompanionConversation(userId: string): Promise<string>;
 
   // Events
   logEvent(userId: string, type: string, payload: unknown): Promise<void>;
