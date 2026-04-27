@@ -324,6 +324,9 @@ export class LocalProvider implements DatabaseProvider {
 
   async listConversations(userId: string, limit: number): Promise<ConversationSummary[]> {
     const db = await this.getDb();
+    // Filter out:
+    //   - Companion chats (those have their own dedicated UI; they aren't part of recents)
+    //   - Empty conversations with no user messages (browser opens that never sent a message)
     const result = await db.query<ConversationSummary>(
       `SELECT c.id, c.started_at, c.ended_at,
          (SELECT m.content FROM messages m
@@ -331,6 +334,11 @@ export class LocalProvider implements DatabaseProvider {
           ORDER BY m.created_at ASC LIMIT 1) AS first_message
        FROM conversations c
        WHERE c.user_id = $1
+         AND (c.is_companion IS NULL OR c.is_companion = 0)
+         AND EXISTS (
+           SELECT 1 FROM messages m
+           WHERE m.conversation_id = c.id AND m.role = 'user'
+         )
        ORDER BY c.started_at DESC
        LIMIT $2`,
       [userId, limit]

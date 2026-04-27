@@ -415,6 +415,11 @@ function renderConversations() {
         loadConversationHistory(id);
       }
     });
+    // Right-click → open the same options menu at the cursor
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      openConvMenu(el, id, { x: e.clientX, y: e.clientY });
+    });
   });
 }
 
@@ -444,9 +449,8 @@ function closeConvMenu() {
   if (convMenuEl) { convMenuEl.remove(); convMenuEl = null; }
 }
 
-function openConvMenu(itemEl, id) {
+function openConvMenu(itemEl, id, posOverride) {
   closeConvMenu();
-  const rect = itemEl.getBoundingClientRect();
   const pinned = isPinned(id);
 
   const menu = document.createElement('div');
@@ -459,8 +463,17 @@ function openConvMenu(itemEl, id) {
   `;
 
   menu.style.position = 'fixed';
-  menu.style.left   = (rect.right + 4) + 'px';
-  menu.style.top    = rect.top + 'px';
+  if (posOverride && typeof posOverride.x === 'number' && typeof posOverride.y === 'number') {
+    // Right-click: position at cursor, but clamp inside viewport
+    const x = Math.min(posOverride.x, window.innerWidth - 180);
+    const y = Math.min(posOverride.y, window.innerHeight - 180);
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+  } else {
+    const rect = itemEl.getBoundingClientRect();
+    menu.style.left = (rect.right + 4) + 'px';
+    menu.style.top  = rect.top + 'px';
+  }
   document.body.appendChild(menu);
   convMenuEl = menu;
 

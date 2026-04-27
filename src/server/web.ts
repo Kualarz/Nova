@@ -129,7 +129,7 @@ function safeWorkspacePath(workspacePath: string, filePath: string): string | nu
 
 // ── Per-connection chat state ─────────────────────────────────────────────────
 interface ChatSession {
-  conversationId: string;
+  conversationId: string | null;
   history: Message[];
   systemPrompt: string;
   model?: string; // user-selected model override for this session
@@ -710,7 +710,7 @@ export function startWebServer(port = 3000): void {
         const url = new URL(req.url ?? '', 'http://x');
         const isCompanion = url.searchParams.get('mode') === 'companion';
 
-        let conversationId: string;
+        let conversationId: string | null;
         let history: Message[] = [];
 
         if (isCompanion) {
@@ -721,9 +721,9 @@ export function startWebServer(port = 3000): void {
             8000,
             'getOrCreateCompanionConversation'
           );
-          // Replay last 50 user/assistant messages so context survives.
-          // Tool rows are stored separately; ConversationMessage.role can be
-          // 'tool' so filter explicitly before casting to Message[].
+          // Replay ALL user/assistant messages so the companion truly retains
+          // every previous conversation (no slice cap — companion is the
+          // user's persistent relationship with NOVA).
           const msgs = await withTimeout(
             db.getConversationMessages(conversationId),
             8000,
@@ -731,10 +731,12 @@ export function startWebServer(port = 3000): void {
           );
           history = msgs
             .filter(m => m.role === 'user' || m.role === 'assistant')
-            .slice(-50)
             .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
         } else {
-          conversationId = await withTimeout(startConversation(), 8000, 'startConversation (DB)');
+          // Lazy creation: don't insert a row in the DB until the user
+          // actually sends a message. Otherwise every page refresh would
+          // create an empty "Untitled conversation" in the recents list.
+          conversationId = null;
         }
 
         const systemPrompt = await withTimeout(buildBaseSystemPrompt(), 8000, 'buildBaseSystemPrompt');
@@ -798,6 +800,11 @@ export function startWebServer(port = 3000): void {
         ws.send(JSON.stringify({ type: 'thinking' }));
 
         try {
+          // Lazy creation — only insert the conversation row now that the
+          // user is sending a real message (avoids empty "Untitled" rows).
+          if (!session.conversationId) {
+            session.conversationId = await startConversation();
+          }
           await appendMessage(session.conversationId, { role: 'user', content: text });
           const { text: reply, newMessages, modelUsed, modelReason } = await runWebTurn(
             session.systemPrompt, session.history, text,
@@ -874,6 +881,11 @@ export function startWebServer(port = 3000): void {
       // memory extraction (the conversation IS the memory) and endConversation.
       if (session.isCompanion) return;
 
+      // Lazy-creation guard: if no conversationId was ever assigned, the user
+      // never sent a message. Nothing to extract, end, or synthesize.
+      const convId = session.conversationId;
+      if (!convId) return;
+
       void (async () => {
         try {
           const cfg = getConfig();
@@ -882,17 +894,17 @@ export function startWebServer(port = 3000): void {
             if (transcript.trim()) {
               const candidates = await extractMemories(transcript);
               if (candidates.length > 0) {
-                await reconcileMemories(candidates, session.conversationId);
+                await reconcileMemories(candidates, convId);
               }
             }
           }
-          await endConversation(session.conversationId);
+          await endConversation(convId);
 
           // If this conversation is linked to a project, fire-and-forget
           // a project-memory synthesis so the right rail stays fresh.
           try {
             const db = await getDb();
-            const projectId = await db.getConversationProjectId(session.conversationId);
+            const projectId = await db.getConversationProjectId(convId);
             if (projectId) {
               const { synthesizeProjectMemory } = await import('../memory/project-synthesis.js');
               void synthesizeProjectMemory(projectId, 'chat-end');
