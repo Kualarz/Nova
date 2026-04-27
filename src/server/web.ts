@@ -134,6 +134,37 @@ interface ChatSession {
   systemPrompt: string;
   model?: string; // user-selected model override for this session
   isCompanion?: boolean;
+  // Phase 3b: in-flight tool-approval requests, keyed by request_id. The
+  // resolve() callback flips a Promise the agent loop is awaiting; timer
+  // auto-denies after 60s so the agent never blocks indefinitely.
+  pendingApprovals?: Map<string, { resolve: (allow: boolean) => void; timer: NodeJS.Timeout }>;
+  requestApproval?: (tool: string, args: unknown, description: string) => Promise<boolean>;
+}
+
+function requestToolApproval(
+  ws: WebSocket,
+  session: ChatSession,
+  tool: string,
+  args: unknown,
+  description: string,
+): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const id = Math.random().toString(36).slice(2);
+    if (!session.pendingApprovals) session.pendingApprovals = new Map();
+    const timer = setTimeout(() => {
+      session.pendingApprovals?.delete(id);
+      resolve(false);
+    }, 60_000);
+    session.pendingApprovals.set(id, { resolve, timer });
+    try {
+      ws.send(JSON.stringify({ type: 'approval_request', request_id: id, tool, args, description }));
+    } catch {
+      // Socket closed before we could ask — fail-safe deny.
+      clearTimeout(timer);
+      session.pendingApprovals.delete(id);
+      resolve(false);
+    }
+  });
 }
 
 function buildHistoryTranscript(history: Message[]): string {
@@ -707,7 +738,13 @@ export function startWebServer(port = 3000): void {
         }
 
         const systemPrompt = await withTimeout(buildBaseSystemPrompt(), 8000, 'buildBaseSystemPrompt');
-        sessions.set(ws, { conversationId, history, systemPrompt, isCompanion });
+        const session: ChatSession = {
+          conversationId, history, systemPrompt, isCompanion,
+          pendingApprovals: new Map(),
+        };
+        session.requestApproval = (tool, args, description) =>
+          requestToolApproval(ws, session, tool, args, description);
+        sessions.set(ws, session);
         ws.send(JSON.stringify({
           type: 'ready',
           companion: isCompanion,
@@ -726,10 +763,27 @@ export function startWebServer(port = 3000): void {
         let text = '';
         let adaptive = false;
         try {
-          const msg = JSON.parse(raw.toString()) as { type: string; text?: string; model?: string; adaptive?: boolean };
+          const msg = JSON.parse(raw.toString()) as {
+            type: string;
+            text?: string;
+            model?: string;
+            adaptive?: boolean;
+            request_id?: string;
+            allow?: boolean;
+          };
           if (msg.type === 'set_model' && msg.model) {
             session.model = msg.model;
             ws.send(JSON.stringify({ type: 'model_set', model: msg.model }));
+            return;
+          }
+          if (msg.type === 'approval_response') {
+            const id = msg.request_id ?? '';
+            const pending = session.pendingApprovals?.get(id);
+            if (pending) {
+              clearTimeout(pending.timer);
+              session.pendingApprovals!.delete(id);
+              pending.resolve(!!msg.allow);
+            }
             return;
           }
           if (msg.type !== 'message' || !msg.text?.trim()) return;
@@ -747,7 +801,7 @@ export function startWebServer(port = 3000): void {
           await appendMessage(session.conversationId, { role: 'user', content: text });
           const { text: reply, newMessages, modelUsed, modelReason } = await runWebTurn(
             session.systemPrompt, session.history, text,
-            { model: session.model, adaptive }
+            { model: session.model, adaptive, requestApproval: session.requestApproval }
           );
           if (modelUsed) {
             ws.send(JSON.stringify({ type: 'model_used', model: modelUsed, reason: modelReason }));
@@ -804,6 +858,16 @@ export function startWebServer(port = 3000): void {
       const session = sessions.get(ws);
       sessions.delete(ws);
       if (!session) return;
+
+      // Resolve any in-flight approval prompts as deny so the agent loop
+      // wakes up rather than hanging on a dead socket.
+      if (session.pendingApprovals) {
+        for (const { resolve, timer } of session.pendingApprovals.values()) {
+          clearTimeout(timer);
+          resolve(false);
+        }
+        session.pendingApprovals.clear();
+      }
 
       // Companion sessions never "end" — they're the user's persistent
       // relationship with NOVA. We keep the raw history and skip both

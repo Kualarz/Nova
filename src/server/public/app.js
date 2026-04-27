@@ -869,6 +869,8 @@ function connectWS() {
       updateModelLabel(msg.model);
     } else if (msg.type === 'context_update') {
       updateContextRing(msg.tokens, msg.limit);
+    } else if (msg.type === 'approval_request') {
+      showApprovalRequest(msg);
     }
   };
 
@@ -2695,6 +2697,42 @@ document.addEventListener('keydown', e => {
     if (CMDK.open) closeCmdk(); else openCmdk();
   }
 });
+
+// ── Tool approval modal (Phase 3b) ────────────────────────────────────────────
+// The server emits `approval_request` whenever the agent picks a tool whose
+// stored permission is `needs-approval`. We show a modal; the user clicks
+// Allow or Deny; we send `approval_response` back, unblocking the agent loop.
+let _pendingApproval = null;
+
+function showApprovalRequest(req) {
+  _pendingApproval = req;
+  const toolEl = document.getElementById('approval-tool');
+  const descEl = document.getElementById('approval-description');
+  const argsEl = document.getElementById('approval-args');
+  if (toolEl) toolEl.textContent = req.tool || '';
+  if (descEl) descEl.textContent = req.description || `NOVA wants to call ${req.tool}.`;
+  if (argsEl) {
+    try { argsEl.textContent = JSON.stringify(req.args, null, 2); }
+    catch { argsEl.textContent = String(req.args); }
+  }
+  document.getElementById('approval-modal')?.classList.remove('hidden');
+}
+
+function respondApproval(allow) {
+  if (!_pendingApproval || !ws) return;
+  try {
+    ws.send(JSON.stringify({
+      type: 'approval_response',
+      request_id: _pendingApproval.request_id,
+      allow: !!allow,
+    }));
+  } catch {}
+  document.getElementById('approval-modal')?.classList.add('hidden');
+  _pendingApproval = null;
+}
+
+document.getElementById('approval-allow')?.addEventListener('click', () => respondApproval(true));
+document.getElementById('approval-deny')?.addEventListener('click', () => respondApproval(false));
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 connectWS();

@@ -1203,6 +1203,28 @@
   </div>
 </div>
 
+<!-- Phase 3b: tool approval modal — server emits `approval_request` for any
+     `'needs-approval'` connector tool the agent decides to call. -->
+<div id="approval-modal" class="connect-modal hidden">
+  <div class="connect-modal-card" style="width:480px">
+    <div class="connect-modal-header">
+      <div class="connect-modal-title">NOVA wants permission</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div id="approval-tool" style="font-family:var(--font-mono);font-size:13px;color:var(--accent);margin-bottom:8px"></div>
+      <div id="approval-description" style="font-size:13px;color:var(--dim);line-height:1.5"></div>
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--dim)">Show arguments</summary>
+        <pre id="approval-args" style="background:rgba(255,255,255,0.04);padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;margin-top:6px"></pre>
+      </details>
+    </div>
+    <div class="connect-modal-actions">
+      <button class="btn btn-danger" id="approval-deny" type="button">Deny</button>
+      <button class="btn btn-primary" id="approval-allow" type="button">Allow once</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

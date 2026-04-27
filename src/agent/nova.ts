@@ -55,7 +55,10 @@ export function isComplexPrompt(text: string): boolean {
 async function runTurn(
   systemPrompt: string,
   history: Message[],
-  opts: { model?: string } = {}
+  opts: {
+    model?: string;
+    requestApproval?: (tool: string, args: unknown, description: string) => Promise<boolean>;
+  } = {}
 ): Promise<{ text: string; newMessages: Message[]; modelUsed?: string }> {
   const tools = toApiTools();
   const added: Message[] = [];
@@ -90,12 +93,12 @@ async function runTurn(
         try {
           const toolInput = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
           console.log(chalk.dim(`  [tool] ${toolCall.function.name}(${toolCall.function.arguments})`));
-          // TODO(phase3b): consult connector_permissions before executing.
-          // If permission='never', short-circuit and return a refusal string.
-          // If permission='needs-approval', emit a WS approval request and
-          // await the user's decision before running. Phase 3 stores+displays
-          // permissions only — enforcement is deferred.
-          toolOutput = await executeTool(toolCall.function.name, toolInput);
+          // Phase 3b: executeTool now consults connector_permissions.
+          // `requestApproval` (when provided) lets it pause for user
+          // approval over the WS channel for `'needs-approval'` tools.
+          toolOutput = await executeTool(toolCall.function.name, toolInput, {
+            requestApproval: opts.requestApproval,
+          });
         } catch (err) {
           toolOutput = `Error: ${(err as Error).message}`;
         }
@@ -127,7 +130,11 @@ export async function runWebTurn(
   systemPrompt: string,
   history: Message[],
   userPrompt: string,
-  opts: { model?: string; adaptive?: boolean } = {}
+  opts: {
+    model?: string;
+    adaptive?: boolean;
+    requestApproval?: (tool: string, args: unknown, description: string) => Promise<boolean>;
+  } = {}
 ): Promise<{ text: string; newMessages: Message[]; modelUsed?: string; modelReason?: string }> {
   const userMsg: Message = { role: 'user', content: userPrompt };
   const config = getConfig();
@@ -153,7 +160,10 @@ export async function runWebTurn(
     reason = 'adaptive: default';
   }
 
-  const result = await runTurn(effectivePrompt, [...history, userMsg], { model: chosenModel });
+  const result = await runTurn(effectivePrompt, [...history, userMsg], {
+    model: chosenModel,
+    requestApproval: opts.requestApproval,
+  });
   return { ...result, modelUsed: chosenModel, modelReason: reason };
 }
 
