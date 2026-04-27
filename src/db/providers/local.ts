@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql', '010_routines.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -481,6 +481,78 @@ export class LocalProvider implements DatabaseProvider {
       [params.event, params.skillName]
     );
     return result.rows[0]!.id;
+  }
+
+  async listRoutines(userId: string): Promise<Routine[]> {
+    const db = await this.getDb();
+    const r = await db.query<Routine>(
+      `SELECT * FROM routines WHERE user_id = $1 ORDER BY updated_at DESC`,
+      [userId]
+    );
+    return r.rows;
+  }
+
+  async getRoutine(id: string): Promise<Routine | null> {
+    const db = await this.getDb();
+    const r = await db.query<Routine>(`SELECT * FROM routines WHERE id = $1`, [id]);
+    return r.rows[0] ?? null;
+  }
+
+  async createRoutine(userId: string, params: CreateRoutineParams): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO routines (user_id, name, description, prompt, cron_expr)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [userId, params.name, params.description ?? null, params.prompt, params.cron_expr]
+    );
+    return r.rows[0]!.id;
+  }
+
+  async updateRoutine(id: string, updates: UpdateRoutineParams): Promise<void> {
+    const db = await this.getDb();
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === undefined) continue;
+      fields.push(`${k} = $${i++}`);
+      values.push(v);
+    }
+    if (!fields.length) return;
+    fields.push(`updated_at = now()::text`);
+    values.push(id);
+    await db.query(`UPDATE routines SET ${fields.join(', ')} WHERE id = $${i}`, values);
+  }
+
+  async deleteRoutine(id: string): Promise<void> {
+    const db = await this.getDb();
+    await db.query(`DELETE FROM routines WHERE id = $1`, [id]);
+  }
+
+  async insertRoutineRun(routineId: string): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO routine_runs (routine_id) VALUES ($1) RETURNING id`,
+      [routineId]
+    );
+    return r.rows[0]!.id;
+  }
+
+  async completeRoutineRun(id: string, status: string, output?: string, error?: string): Promise<void> {
+    const db = await this.getDb();
+    await db.query(
+      `UPDATE routine_runs SET completed_at = now()::text, status = $1, output = $2, error = $3 WHERE id = $4`,
+      [status, output ?? null, error ?? null, id]
+    );
+  }
+
+  async listRoutineRuns(routineId: string, limit: number): Promise<RoutineRun[]> {
+    const db = await this.getDb();
+    const r = await db.query<RoutineRun>(
+      `SELECT * FROM routine_runs WHERE routine_id = $1 ORDER BY started_at DESC LIMIT $2`,
+      [routineId, limit]
+    );
+    return r.rows;
   }
 
   async close(): Promise<void> {

@@ -1567,105 +1567,182 @@ document.getElementById('memory-search').addEventListener('input', function() {
 
 document.getElementById('refresh-memories-btn').addEventListener('click', loadMemories);
 
-// ── TASKS PANEL ───────────────────────────────────────────────────────────────
-let allTasks = [];
+// ── ROUTINES PANEL ────────────────────────────────────────────────────────────
+let _routines = [];
+let _editingRoutineId = null;
 
 async function loadTasks() {
+  // Nav handler still says "tasks" (data-panel="tasks") but it's the Routines UI now.
+  await loadRoutines();
+}
+
+async function loadRoutines() {
+  const list = document.getElementById('routines-list');
+  if (!list) return;
+  document.getElementById('routines-list-view').classList.remove('hidden');
+  document.getElementById('routine-detail-view').classList.add('hidden');
   try {
-    allTasks = await apiFetch('/api/tasks');
-    renderTasks(allTasks);
+    _routines = await apiFetch('/api/routines');
+    if (!_routines.length) {
+      list.innerHTML = '<div class="routine-card-empty">No routines yet. Click <strong>+ New routine</strong> to schedule something.</div>';
+      return;
+    }
+    list.innerHTML = _routines.map(r => {
+      const statusClass = r.last_run_status || 'never';
+      const statusLabel = r.last_run_status ? r.last_run_status : 'never run';
+      return `
+        <div class="routine-card" data-id="${escapeHtml(r.id)}">
+          <div class="routine-card-row">
+            <div style="flex:1;min-width:0">
+              <div class="routine-card-name">${escapeHtml(r.name)}</div>
+              <div class="routine-card-cron">${escapeHtml(r.cron_expr)}${r.description ? ' · ' + escapeHtml(r.description) : ''}</div>
+            </div>
+            <span class="routine-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
+            <div class="routine-card-actions">
+              <label class="settings-toggle routine-toggle"><input type="checkbox" ${r.enabled ? 'checked' : ''} data-toggle="${escapeHtml(r.id)}"><span></span></label>
+              <button class="btn btn-sm" data-action="run" data-id="${escapeHtml(r.id)}">Run now</button>
+              <button class="btn btn-sm" data-action="edit" data-id="${escapeHtml(r.id)}">Edit</button>
+              <button class="btn btn-sm" data-action="view" data-id="${escapeHtml(r.id)}">View</button>
+              <button class="btn btn-sm btn-danger" data-action="delete" data-id="${escapeHtml(r.id)}">×</button>
+            </div>
+          </div>
+          ${r.last_run_at ? `<div class="routine-card-last">Last run: ${fmtAge(r.last_run_at)}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('[data-toggle]').forEach(input => {
+      input.addEventListener('change', async () => {
+        try {
+          await apiFetch('/api/routines/' + encodeURIComponent(input.dataset.toggle), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: input.checked }),
+          });
+        } catch (e) { alert('Toggle failed: ' + e.message); loadRoutines(); }
+      });
+    });
+
+    list.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const action = btn.dataset.action;
+        if (action === 'run') {
+          btn.disabled = true; btn.textContent = 'Running…';
+          try {
+            await apiFetch('/api/routines/' + encodeURIComponent(id) + '/run', { method: 'POST' });
+            setTimeout(loadRoutines, 1500);
+          } catch (e) { alert('Run failed: ' + e.message); }
+          finally { btn.disabled = false; btn.textContent = 'Run now'; }
+        }
+        if (action === 'edit')   openRoutineModal(id);
+        if (action === 'view')   viewRoutineDetail(id);
+        if (action === 'delete') {
+          if (!confirm('Delete this routine?')) return;
+          try {
+            await apiFetch('/api/routines/' + encodeURIComponent(id), { method: 'DELETE' });
+            loadRoutines();
+          } catch (e) { alert('Delete failed: ' + e.message); }
+        }
+      });
+    });
   } catch (e) {
-    document.getElementById('tasks-list').innerHTML =
-      `<div class="empty-state" style="color:var(--red)">Failed to load: ${escapeHtml(e.message)}</div>`;
+    list.innerHTML = `<div class="routine-card-empty" style="color:var(--red)">${escapeHtml(e.message)}</div>`;
   }
 }
 
-function renderTasks(tasks) {
-  const list = document.getElementById('tasks-list');
-  if (!tasks.length) {
-    list.innerHTML = '<div class="empty-state">No tasks yet — click <strong>+ New Task</strong> to add one.</div>';
-    return;
-  }
-  list.innerHTML = tasks.map(t => `
-    <div class="task-card" data-id="${escapeHtml(t.id)}">
-      <div class="task-card-header">
-        <span class="task-status-dot ${t.status}" title="${t.status}"></span>
-        <span class="task-desc">${escapeHtml(t.description)}</span>
-        <span class="task-dates">${fmtAge(t.created_at)}</span>
-        <button class="btn btn-sm btn-danger task-delete-btn" data-id="${escapeHtml(t.id)}" title="Delete task">✕</button>
-      </div>
-      ${t.result ? `<div class="task-result">${escapeHtml(t.result.slice(0, 300))}${t.result.length > 300 ? '…' : ''}</div>` : ''}
-      ${t.error  ? `<div class="task-error">${escapeHtml(t.error)}</div>` : ''}
-    </div>
-  `).join('');
-
-  // Wire delete buttons
-  list.querySelectorAll('.task-delete-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      if (!confirm('Delete this task?')) return;
-      try {
-        await apiFetch('/api/tasks/' + id, { method: 'DELETE' });
-        await loadTasks();
-      } catch (err) {
-        alert('Delete failed: ' + err.message);
-      }
-    });
-  });
-}
-
-document.getElementById('refresh-tasks-btn').addEventListener('click', loadTasks);
-
-// Task modal open/close
-const taskModal = document.getElementById('task-modal');
-function openTaskModal() {
-  document.getElementById('task-topic').value  = '';
-  document.getElementById('task-detail').value = '';
-  document.getElementById('task-action').value = '';
-  taskModal.style.display = 'flex';
-  document.getElementById('task-topic').focus();
-}
-function closeTaskModal() {
-  taskModal.style.display = 'none';
-}
-
-document.getElementById('new-task-btn').addEventListener('click', openTaskModal);
-document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
-document.getElementById('task-modal-cancel').addEventListener('click', closeTaskModal);
-taskModal.addEventListener('click', e => { if (e.target === taskModal) closeTaskModal(); });
-
-document.getElementById('task-modal-submit').addEventListener('click', async () => {
-  const topic  = document.getElementById('task-topic').value.trim();
-  const detail = document.getElementById('task-detail').value.trim();
-  const action = document.getElementById('task-action').value.trim();
-  if (!topic) {
-    document.getElementById('task-topic').focus();
-    return;
-  }
-  const btn = document.getElementById('task-modal-submit');
-  btn.disabled = true;
-  btn.textContent = 'Creating…';
+async function viewRoutineDetail(id) {
   try {
-    const res = await apiFetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, detail, action }),
-    });
-    allTasks = res.tasks;
-    renderTasks(allTasks);
-    closeTaskModal();
-  } catch (err) {
-    alert('Failed to create task: ' + err.message);
+    const data = await apiFetch('/api/routines/' + encodeURIComponent(id));
+    document.getElementById('routines-list-view').classList.add('hidden');
+    document.getElementById('routine-detail-view').classList.remove('hidden');
+    document.getElementById('routine-detail-name').textContent = data.name;
+    document.getElementById('routine-detail-meta').textContent =
+      `${data.cron_expr} · ${data.enabled ? 'Enabled' : 'Disabled'} · last run: ${data.last_run_at ? fmtAge(data.last_run_at) : 'never'}`;
+    document.getElementById('routine-detail-output').textContent = data.last_run_output || '(no output yet)';
+    const runs = data.runs || [];
+    const runsList = document.getElementById('routine-runs-list');
+    if (!runs.length) {
+      runsList.innerHTML = '<div style="color:var(--dimmer);font-size:12px">No runs yet</div>';
+    } else {
+      runsList.innerHTML = runs.map(r => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:14px;align-items:center">
+          <span class="routine-card-status ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+          <span style="color:var(--dim)">${fmtAge(r.started_at)}</span>
+          <span style="color:var(--dimmer)">${r.completed_at ? 'completed ' + fmtAge(r.completed_at) : 'in progress'}</span>
+        </div>
+      `).join('');
+    }
+  } catch (e) { alert('Failed to load: ' + e.message); }
+}
+
+document.getElementById('routine-back-btn')?.addEventListener('click', loadRoutines);
+
+const routineModal = document.getElementById('routine-modal');
+function openRoutineModal(id = null) {
+  _editingRoutineId = id;
+  document.getElementById('routine-modal-title').textContent = id ? 'Edit routine' : 'New routine';
+  if (id) {
+    const r = _routines.find(x => x.id === id);
+    if (r) {
+      document.getElementById('routine-name').value   = r.name;
+      document.getElementById('routine-desc').value   = r.description || '';
+      document.getElementById('routine-prompt').value = r.prompt;
+      document.getElementById('routine-cron').value   = r.cron_expr;
+    }
+  } else {
+    document.getElementById('routine-name').value   = '';
+    document.getElementById('routine-desc').value   = '';
+    document.getElementById('routine-prompt').value = '';
+    document.getElementById('routine-cron').value   = '0 8 * * *';
+  }
+  routineModal.style.display = 'flex';
+  document.getElementById('routine-name').focus();
+}
+function closeRoutineModal() { routineModal.style.display = 'none'; }
+
+document.getElementById('new-routine-btn')?.addEventListener('click', () => openRoutineModal());
+document.getElementById('routine-modal-close')?.addEventListener('click', closeRoutineModal);
+document.getElementById('routine-cancel')?.addEventListener('click', closeRoutineModal);
+routineModal?.addEventListener('click', e => { if (e.target === routineModal) closeRoutineModal(); });
+
+document.getElementById('routine-save')?.addEventListener('click', async () => {
+  const body = {
+    name:        document.getElementById('routine-name').value.trim(),
+    description: document.getElementById('routine-desc').value.trim(),
+    prompt:      document.getElementById('routine-prompt').value.trim(),
+    cron_expr:   document.getElementById('routine-cron').value.trim(),
+  };
+  if (!body.name || !body.prompt || !body.cron_expr) {
+    alert('Name, prompt, and schedule are required');
+    return;
+  }
+  const btn = document.getElementById('routine-save');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Saving…';
+  try {
+    if (_editingRoutineId) {
+      await apiFetch('/api/routines/' + encodeURIComponent(_editingRoutineId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } else {
+      await apiFetch('/api/routines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+    closeRoutineModal();
+    loadRoutines();
+  } catch (e) {
+    alert('Save failed: ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Create Task';
+    btn.textContent = orig;
   }
-});
-
-// Keyboard shortcut: Enter in topic field submits modal
-document.getElementById('task-topic').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('task-modal-submit').click();
 });
 
 // ── SETTINGS PANEL ────────────────────────────────────────────────────────────

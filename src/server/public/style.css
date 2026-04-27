@@ -930,6 +930,48 @@ button.sidebar-user {
 .task-card:hover .task-delete-btn { opacity: 1; }
 .task-delete-btn:hover { color: var(--red); background: rgba(239,68,68,0.1); }
 
+/* ── ROUTINES PANEL ─────────────────────────────────────────────────────────── */
+.routines-body { padding: 24px 32px; overflow-y: auto; flex: 1; }
+.routines-list { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.routine-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.routine-card:hover { border-color: var(--border2); }
+.routine-card-row { display: flex; align-items: center; gap: 14px; }
+.routine-card-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.routine-card-cron {
+  font-size: 11px; color: var(--dim);
+  font-family: var(--font-mono); margin-top: 2px;
+}
+.routine-card-status {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; flex-shrink: 0;
+  text-transform: lowercase;
+}
+.routine-card-status.success { background: rgba(34,197,94,0.15);  color: var(--green); }
+.routine-card-status.error   { background: rgba(239,68,68,0.15);  color: var(--red); }
+.routine-card-status.never,
+.routine-card-status.running { background: rgba(255,255,255,0.06); color: var(--dimmer); }
+.routine-card-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.routine-toggle { width: 36px; height: 20px; }
+.routine-card-last {
+  font-size: 12px; color: var(--dim);
+  margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.routine-card-empty {
+  padding: 60px 20px; text-align: center;
+  color: var(--dimmer); font-size: 13px;
+}
+.routines-body .hint code,
+.routines-list .hint code {
+  background: rgba(255,255,255,0.08);
+  padding: 1px 5px; border-radius: 3px; font-size: 11px;
+  font-family: var(--font-mono);
+}
+
 /* ── SETTINGS PANEL ──────────────────────────────────────────────────────────── */
 #panel-settings { padding: 0; }
 

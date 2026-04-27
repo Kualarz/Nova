@@ -31,6 +31,7 @@ import { startConversation, appendMessage, endConversation } from '../conversati
 import { extractMemories } from '../memory/extract.js';
 import { reconcileMemories } from '../memory/reconcile.js';
 import { CONNECTOR_CATALOG, defaultPermission } from '../connectors/catalog.js';
+import { loadAllRoutines, scheduleRoutine, unscheduleRoutine, executeRoutine } from '../routines/engine.js';
 import type { Message } from '../providers/interface.js';
 
 function getProjectFilesDir(workspacePath: string, projectId: string): string {
@@ -470,6 +471,88 @@ export function startWebServer(port = 3000): void {
     } catch (err) { res.status(500).json({ error: (err as Error).message }); }
   });
 
+  // ── Routines (scheduled prompts) ────────────────────────────────────────────
+  app.get('/api/routines', async (_req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const routines = await db.listRoutines(config.NOVA_USER_ID);
+      res.json(routines);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.get('/api/routines/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      const routine = await db.getRoutine(req.params.id);
+      if (!routine) return res.status(404).json({ error: 'Not found' });
+      const runs = await db.listRoutineRuns(req.params.id, 20);
+      res.json({ ...routine, runs });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/routines', async (req, res) => {
+    try {
+      const config = getConfig();
+      const db = await getDb();
+      const { name, description, prompt, cron_expr } = req.body as { name?: string; description?: string; prompt?: string; cron_expr?: string };
+      if (!name?.trim() || !prompt?.trim() || !cron_expr?.trim()) {
+        return res.status(400).json({ error: 'name, prompt, cron_expr required' });
+      }
+      if (!cron.validate(cron_expr)) {
+        return res.status(400).json({ error: 'Invalid cron expression' });
+      }
+      const id = await db.createRoutine(config.NOVA_USER_ID, {
+        name: name.trim(),
+        description,
+        prompt: prompt.trim(),
+        cron_expr: cron_expr.trim(),
+      });
+      const routine = await db.getRoutine(id);
+      if (routine) scheduleRoutine(routine);
+      res.json(routine);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.patch('/api/routines/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      const { name, description, prompt, cron_expr, enabled } = req.body as {
+        name?: string; description?: string; prompt?: string; cron_expr?: string; enabled?: boolean;
+      };
+      if (cron_expr && !cron.validate(cron_expr)) {
+        return res.status(400).json({ error: 'Invalid cron expression' });
+      }
+      const updates: { name?: string; description?: string; prompt?: string; cron_expr?: string; enabled?: number } = {
+        name, description, prompt, cron_expr,
+      };
+      if (typeof enabled === 'boolean') updates.enabled = enabled ? 1 : 0;
+      await db.updateRoutine(req.params.id, updates);
+      const updated = await db.getRoutine(req.params.id);
+      if (updated) scheduleRoutine(updated);
+      res.json(updated);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.delete('/api/routines/:id', async (req, res) => {
+    try {
+      const db = await getDb();
+      unscheduleRoutine(req.params.id);
+      await db.deleteRoutine(req.params.id);
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/routines/:id/run', async (req, res) => {
+    try {
+      const db = await getDb();
+      const routine = await db.getRoutine(req.params.id);
+      if (!routine) return res.status(404).json({ error: 'Not found' });
+      void executeRoutine(routine);
+      res.json({ ok: true, message: 'Routine started — check status in a moment' });
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
   app.get('/api/workspace', (_req, res) => {
     try {
       const config = getConfig();
@@ -753,6 +836,16 @@ export function startWebServer(port = 3000): void {
   server.listen(port, () => {
     console.log(`[web] http://localhost:${port}`);
   });
+
+  // Load and schedule existing routines on server start
+  void (async () => {
+    try {
+      const config = getConfig();
+      await loadAllRoutines(config.NOVA_USER_ID);
+    } catch (err) {
+      console.error('[routines] Failed to load:', (err as Error).message);
+    }
+  })();
 
   // Nightly project memory synthesis at 3 AM
   cron.schedule('0 3 * * *', async () => {

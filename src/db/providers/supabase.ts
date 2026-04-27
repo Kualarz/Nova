@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -289,6 +289,31 @@ export class SupabaseProvider implements DatabaseProvider {
   }
   async setConnectorPermission(_userId: string, _connector: string, _tool: string, _permission: 'always-allow' | 'needs-approval' | 'never'): Promise<void> {
     throw new Error('Not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+
+  async listRoutines(_userId: string): Promise<Routine[]> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async getRoutine(_id: string): Promise<Routine | null> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async createRoutine(_userId: string, _params: CreateRoutineParams): Promise<string> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async updateRoutine(_id: string, _updates: UpdateRoutineParams): Promise<void> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async deleteRoutine(_id: string): Promise<void> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async insertRoutineRun(_routineId: string): Promise<string> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async completeRoutineRun(_id: string, _status: string, _output?: string, _error?: string): Promise<void> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async listRoutineRuns(_routineId: string, _limit: number): Promise<RoutineRun[]> {
+    throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
   }
 
   async runMigrations(): Promise<void> {

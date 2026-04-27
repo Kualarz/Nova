@@ -426,51 +426,62 @@
       </div>
     </div>
 
-    <!-- ── ROUTINES PANEL (formerly Tasks) ────────────────────────────────── -->
+    <!-- ── ROUTINES PANEL ──────────────────────────────────────────────────── -->
     <div id="panel-tasks" class="panel">
       <div class="panel-header">
         <h2>Routines</h2>
-        <div style="display:flex;gap:8px">
-          <button id="refresh-tasks-btn" class="btn btn-sm" type="button">Refresh</button>
-          <button id="new-task-btn" class="btn btn-sm btn-primary" type="button">+ New Routine</button>
-        </div>
+        <button class="btn btn-primary" id="new-routine-btn" type="button">+ New routine</button>
       </div>
-      <div style="padding: 16px 24px 0">
+      <div class="routines-body">
         <div class="memory-explainer">
           <div class="settings-explainer-title">⏰ What are routines?</div>
-          <p>Routines are scheduled or triggered actions NOVA performs automatically. Examples: a morning briefing at 8am, a weekly memory consolidation on Sundays, or a price check on a watched product. Routines can run on a schedule, on a trigger event, or on demand.</p>
-          <p style="margin-top:8px"><em>Coming soon:</em> create custom routines from chat ("at 9am every weekday, summarize my Gmail inbox").</p>
+          <p>Routines are scheduled prompts NOVA runs automatically. Set a cron schedule, write the prompt, and NOVA fires it on time. Use them for daily summaries, weekly retros, hourly checks, anything recurring.</p>
         </div>
-      </div>
-      <div id="tasks-list" class="tasks-list">
-        <div class="empty-state">Loading…</div>
+
+        <div id="routines-list-view">
+          <div id="routines-list" class="routines-list"></div>
+        </div>
+
+        <div id="routine-detail-view" class="hidden">
+          <button class="btn btn-sm" id="routine-back-btn" type="button" style="margin-bottom:14px">← Back to routines</button>
+          <h3 id="routine-detail-name" style="font-size:18px;margin-bottom:8px"></h3>
+          <div id="routine-detail-meta" style="font-size:12px;color:var(--dim);margin-bottom:14px"></div>
+          <div class="field"><label>Last output</label><pre id="routine-detail-output" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;max-height:240px;overflow-y:auto;white-space:pre-wrap"></pre></div>
+          <h4 style="font-size:13px;margin:18px 0 8px;color:var(--dim)">Run history</h4>
+          <div id="routine-runs-list"></div>
+        </div>
       </div>
     </div>
 
-    <!-- ── NEW TASK MODAL ──────────────────────────────────────────────────── -->
-    <div id="task-modal" class="modal-overlay" style="display:none">
-      <div class="modal">
+    <!-- ── NEW/EDIT ROUTINE MODAL ──────────────────────────────────────────── -->
+    <div id="routine-modal" class="modal-overlay" style="display:none">
+      <div class="modal" style="width:540px;max-width:92vw">
         <div class="modal-header">
-          <span class="modal-title">New Task</span>
-          <button id="task-modal-close" class="modal-close" type="button">✕</button>
+          <span class="modal-title" id="routine-modal-title">New routine</span>
+          <button id="routine-modal-close" class="modal-close" type="button">✕</button>
         </div>
         <div class="modal-body">
           <div class="field">
-            <label for="task-topic">Topic <span style="color:var(--red)">*</span></label>
-            <input id="task-topic" type="text" placeholder="e.g. Refactor auth module" autocomplete="off">
+            <label for="routine-name">Name <span style="color:var(--red)">*</span></label>
+            <input id="routine-name" type="text" placeholder="e.g., Morning briefing" autocomplete="off">
           </div>
           <div class="field">
-            <label for="task-detail">Detail</label>
-            <textarea id="task-detail" rows="3" placeholder="Describe what this task involves…" style="resize:vertical"></textarea>
+            <label for="routine-desc">Description (optional)</label>
+            <input id="routine-desc" type="text" placeholder="What this routine does" autocomplete="off">
           </div>
           <div class="field">
-            <label for="task-action">Command / Action</label>
-            <input id="task-action" type="text" placeholder="e.g. Run tests, Notify on Telegram…" autocomplete="off">
+            <label for="routine-prompt">Prompt <span style="color:var(--red)">*</span></label>
+            <textarea id="routine-prompt" rows="5" placeholder="What should NOVA do? e.g., 'Summarize the most important emails in my inbox from the last 24 hours.'" style="resize:vertical"></textarea>
+          </div>
+          <div class="field">
+            <label for="routine-cron">Schedule (cron expression) <span style="color:var(--red)">*</span></label>
+            <input id="routine-cron" type="text" placeholder="0 8 * * 1-5" value="0 8 * * *" autocomplete="off">
+            <div class="hint">Examples: <code>0 8 * * *</code> (8am daily) · <code>0 8 * * 1-5</code> (8am weekdays) · <code>0 */4 * * *</code> (every 4 hours) · <code>0 18 * * 0</code> (Sundays 6pm)</div>
           </div>
         </div>
         <div class="modal-footer">
-          <button id="task-modal-cancel" class="btn" type="button">Cancel</button>
-          <button id="task-modal-submit" class="btn btn-primary" type="button">Create Task</button>
+          <button class="btn" id="routine-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="routine-save" type="button">Save routine</button>
         </div>
       </div>
     </div>

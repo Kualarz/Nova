@@ -116,6 +116,49 @@ export interface ProjectWithStats extends Project {
   chat_count: number;
 }
 
+export interface Routine {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  prompt: string;
+  cron_expr: string;
+  enabled: number;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_output: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutineRun {
+  id: string;
+  routine_id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  output: string | null;
+  error: string | null;
+}
+
+export interface CreateRoutineParams {
+  name: string;
+  description?: string;
+  prompt: string;
+  cron_expr: string;
+}
+
+export interface UpdateRoutineParams {
+  name?: string;
+  description?: string;
+  prompt?: string;
+  cron_expr?: string;
+  enabled?: number;
+  last_run_at?: string;
+  last_run_status?: string;
+  last_run_output?: string;
+}
+
 export interface DatabaseProvider {
   // Memories
   insertMemory(params: InsertMemoryParams): Promise<string>;
@@ -170,6 +213,16 @@ export interface DatabaseProvider {
   // Connector permissions
   listConnectorPermissions(userId: string, connector?: string): Promise<Array<{ connector: string; tool: string; permission: string }>>;
   setConnectorPermission(userId: string, connector: string, tool: string, permission: 'always-allow' | 'needs-approval' | 'never'): Promise<void>;
+
+  // Routines
+  listRoutines(userId: string): Promise<Routine[]>;
+  getRoutine(id: string): Promise<Routine | null>;
+  createRoutine(userId: string, params: CreateRoutineParams): Promise<string>;
+  updateRoutine(id: string, updates: UpdateRoutineParams): Promise<void>;
+  deleteRoutine(id: string): Promise<void>;
+  insertRoutineRun(routineId: string): Promise<string>;
+  completeRoutineRun(id: string, status: string, output?: string, error?: string): Promise<void>;
+  listRoutineRuns(routineId: string, limit: number): Promise<RoutineRun[]>;
 
   // Stats
   getSessionStats(userId: string): Promise<SessionStats>;
