@@ -198,7 +198,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
         _isCompanionMode = false;
         showCompanionHeader(false);
       }
-      // "New chat" — clear messages and reconnect (fresh, non-companion)
+      // "New chat" sidebar item ALWAYS starts a fresh chat — clear active id
+      localStorage.removeItem('nova:active-conversation');
+      document.getElementById('history-banner')?.remove();
       document.getElementById('chat-messages').innerHTML = '';
       _hasMessages = false;
       setWelcome(true);
@@ -864,7 +866,15 @@ function setChatStatus(msg, cls) {
 // previous connection's onclose fires 3s later and reconnects to the wrong mode.
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const path  = _isCompanionMode ? '/ws?mode=companion' : '/ws';
+  let path;
+  if (_isCompanionMode) {
+    path = '/ws?mode=companion';
+  } else {
+    // Resume the active conversation if we have one — keeps the chat
+    // coherent across page reloads instead of fragmenting into a new entry.
+    const activeId = localStorage.getItem('nova:active-conversation');
+    path = activeId ? `/ws?conversation=${encodeURIComponent(activeId)}` : '/ws';
+  }
   ws = new WebSocket(`${proto}//${location.host}${path}`);
   setChatStatus('connecting…');
 
@@ -880,6 +890,13 @@ function connectWS() {
       if (msg.companion) {
         // Server replays history — fetch and render it
         fetchCompanionHistory();
+      } else if (msg.conversationId && msg.historyLen) {
+        // Resumed a conversation with existing messages — render them
+        fetchAndRenderConversation(msg.conversationId);
+      }
+      // Track the active conversation in localStorage so reloads can resume
+      if (!msg.companion && msg.conversationId) {
+        localStorage.setItem('nova:active-conversation', msg.conversationId);
       }
     } else if (msg.type === 'thinking') {
       showThinking(true);
@@ -963,20 +980,25 @@ document.getElementById('chat-input').addEventListener('input', function() {
 
 document.getElementById('clear-chat-btn').addEventListener('click', () => {
   if (_isCompanionMode) { _isCompanionMode = false; showCompanionHeader(false); }
+  // Clear the active conversation so the next message starts a fresh chat
+  localStorage.removeItem('nova:active-conversation');
   document.getElementById('chat-messages').innerHTML = '';
   _hasMessages = false;
   setWelcome(true);
   clearAttachments();
+  document.getElementById('history-banner')?.remove();
   reconnectWS(false);
 });
 
 // New Chat button (sidebar) — same as clear
 document.getElementById('new-chat-btn').addEventListener('click', () => {
   if (_isCompanionMode) { _isCompanionMode = false; showCompanionHeader(false); }
+  localStorage.removeItem('nova:active-conversation');
   document.getElementById('chat-messages').innerHTML = '';
   _hasMessages = false;
   setWelcome(true);
   clearAttachments();
+  document.getElementById('history-banner')?.remove();
   reconnectWS(false);
   switchPanel('chat');
 });
@@ -2664,7 +2686,44 @@ function activateCmdkResult(idx) {
   }
 }
 
+// Renders the messages of a conversation in the chat panel WITHOUT opening
+// a new WS — used after the WS resumes an existing conversation.
+async function fetchAndRenderConversation(conversationId) {
+  try {
+    const data = await apiFetch('/api/conversations/' + encodeURIComponent(conversationId) + '/messages');
+    document.getElementById('chat-messages').innerHTML = '';
+    _hasMessages = data.length > 0;
+    setWelcome(!_hasMessages);
+    for (const m of data) {
+      if (m.role === 'user') appendChatMsg('user', m.content);
+      else if (m.role === 'assistant') appendChatMsg('nova', m.content);
+    }
+    // Remove any stale history banner from old read-only mode
+    document.getElementById('history-banner')?.remove();
+  } catch (err) {
+    console.warn('Failed to render conversation:', err);
+  }
+}
+
 async function loadConversationHistory(conversationId) {
+  // New behavior: actually attach to this conversation as the active one,
+  // re-open WS so the user can keep chatting in it (no more read-only mode).
+  switchPanel('chat');
+  if (_isCompanionMode) {
+    _isCompanionMode = false;
+    showCompanionHeader(false);
+  }
+  document.getElementById('history-banner')?.remove();
+  localStorage.setItem('nova:active-conversation', conversationId);
+  document.getElementById('chat-messages').innerHTML = '';
+  _hasMessages = false;
+  setWelcome(true);
+  if (ws) { ws.close(); }
+  setTimeout(connectWS, 200);
+}
+
+// Old read-only history viewer — kept for the dead branches but unused now
+async function _legacyReadOnlyHistory(conversationId) {
   switchPanel('chat');
   try {
     const data = await apiFetch('/api/conversations/' + encodeURIComponent(conversationId) + '/messages');

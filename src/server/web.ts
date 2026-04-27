@@ -733,10 +733,31 @@ export function startWebServer(port = 3000): void {
             .filter(m => m.role === 'user' || m.role === 'assistant')
             .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
         } else {
-          // Lazy creation: don't insert a row in the DB until the user
-          // actually sends a message. Otherwise every page refresh would
-          // create an empty "Untitled conversation" in the recents list.
-          conversationId = null;
+          // Resume a specific conversation if the client passed one. Each entry
+          // in the recents list is a full conversation that persists across
+          // page reloads — only "New chat" creates a fresh row.
+          const requestedId = url.searchParams.get('conversation');
+          if (requestedId) {
+            try {
+              const db = await withTimeout(getDb(), 8000, 'getDb (resume)');
+              const msgs = await withTimeout(
+                db.getConversationMessages(requestedId),
+                8000,
+                'getConversationMessages (resume)'
+              );
+              conversationId = requestedId;
+              history = msgs
+                .filter(m => m.role === 'user' || m.role === 'assistant')
+                .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+            } catch {
+              // Conversation not found / can't load → start fresh on first message
+              conversationId = null;
+            }
+          } else {
+            // Lazy creation: don't insert a row in the DB until the user
+            // actually sends a message.
+            conversationId = null;
+          }
         }
 
         const systemPrompt = await withTimeout(buildBaseSystemPrompt(), 8000, 'buildBaseSystemPrompt');
@@ -751,6 +772,7 @@ export function startWebServer(port = 3000): void {
           type: 'ready',
           companion: isCompanion,
           historyLen: history.length,
+          conversationId, // tell client which conversation it's actually attached to
         }));
       } catch (err) {
         ws.send(JSON.stringify({ type: 'error', message: (err as Error).message }));
@@ -898,7 +920,11 @@ export function startWebServer(port = 3000): void {
               }
             }
           }
-          await endConversation(convId);
+          // NOTE: We intentionally do NOT call endConversation() here.
+          // Conversations should stay resumable across page reloads — the user
+          // expects each entry in Recents to be a coherent multi-turn chat,
+          // not get fragmented every time the browser disconnects.
+          // Memory extraction above still captures any new content.
 
           // If this conversation is linked to a project, fire-and-forget
           // a project-memory synthesis so the right rail stays fresh.
