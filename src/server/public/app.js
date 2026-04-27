@@ -305,6 +305,7 @@ function switchPanel(name) {
   if (name === 'workspace') loadProjectsList();
   if (name === 'settings')  loadSettings();
   if (name === 'customize') loadCustomize();
+  if (name === 'subagents') loadSubagentsPanel();
   if (name === 'chat')      updateWelcomeGreeting();
 }
 
@@ -3086,6 +3087,111 @@ function respondApproval(allow) {
 
 document.getElementById('approval-allow')?.addEventListener('click', () => respondApproval(true));
 document.getElementById('approval-deny')?.addEventListener('click', () => respondApproval(false));
+
+// ── Sub-agents panel (Phase 4.3) ─────────────────────────────────────────────
+let _subagentRunName = null;
+
+async function loadSubagentsPanel() {
+  const cat  = document.getElementById('subagents-catalog');
+  const runs = document.getElementById('subagent-runs-list');
+  if (!cat || !runs) return;
+
+  cat.innerHTML  = '<div style="color:var(--dimmer);font-size:12px">Loading…</div>';
+  runs.innerHTML = '';
+
+  try {
+    const [agents, runList] = await Promise.all([
+      apiFetch('/api/subagents'),
+      apiFetch('/api/subagents/runs').catch(() => []),
+    ]);
+
+    if (!Array.isArray(agents) || agents.length === 0) {
+      cat.innerHTML = '<div style="color:var(--dimmer);font-size:12px">No sub-agents found.</div>';
+    } else {
+      cat.innerHTML = agents.map(a => `
+        <div class="subagent-card" data-agent="${escapeHtml(a.name)}">
+          <div class="subagent-card-name">🤖 ${escapeHtml(a.name)}</div>
+          <div class="subagent-card-desc">${escapeHtml(a.description || '')}</div>
+          <div class="subagent-card-tools">${(Array.isArray(a.tools) && a.tools.length) ? 'Tools: ' + a.tools.map(escapeHtml).join(', ') : 'No tools (pure chat)'}</div>
+        </div>
+      `).join('');
+      cat.querySelectorAll('[data-agent]').forEach(el => {
+        el.addEventListener('click', () => openSubagentRunModal(el.dataset.agent));
+      });
+    }
+
+    if (!Array.isArray(runList) || runList.length === 0) {
+      runs.innerHTML = '<div style="color:var(--dimmer);font-size:12px">No runs yet. Click an agent above to run one.</div>';
+    } else {
+      runs.innerHTML = runList.map(r => `
+        <div class="subagent-run-row" data-run-id="${escapeHtml(r.id)}">
+          <span class="subagent-run-status ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+          <span style="color:var(--dim);font-family:var(--font-mono, ui-monospace, monospace);font-size:11px;flex-shrink:0">${escapeHtml(r.agent_name)}</span>
+          <span class="subagent-run-task" title="${escapeHtml(r.task)}">${escapeHtml(r.task)}</span>
+          <span style="color:var(--dimmer);font-size:11px;flex-shrink:0">${fmtAge(r.started_at)}</span>
+        </div>
+      `).join('');
+    }
+  } catch (e) {
+    cat.innerHTML = `<div style="color:var(--red, #f87171);font-size:12px">Failed to load: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function openSubagentRunModal(name) {
+  if (!name) return;
+  _subagentRunName = name;
+  const titleEl = document.getElementById('subagent-run-title');
+  const taskEl  = document.getElementById('subagent-run-task');
+  const outEl   = document.getElementById('subagent-run-output');
+  const modal   = document.getElementById('subagent-run-modal');
+  if (titleEl) titleEl.textContent = 'Run ' + name;
+  if (taskEl)  taskEl.value = '';
+  if (outEl) {
+    outEl.style.display = 'none';
+    outEl.textContent = '';
+  }
+  if (modal) modal.style.display = 'flex';
+  setTimeout(() => taskEl?.focus(), 50);
+}
+
+function closeSubagentRunModal() {
+  const modal = document.getElementById('subagent-run-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+document.getElementById('subagent-run-close') ?.addEventListener('click', closeSubagentRunModal);
+document.getElementById('subagent-run-cancel')?.addEventListener('click', closeSubagentRunModal);
+document.getElementById('refresh-subagents-btn')?.addEventListener('click', loadSubagentsPanel);
+
+document.getElementById('subagent-run-go')?.addEventListener('click', async () => {
+  const taskEl = document.getElementById('subagent-run-task');
+  const outEl  = document.getElementById('subagent-run-output');
+  const goBtn  = document.getElementById('subagent-run-go');
+  const task   = taskEl?.value.trim();
+  if (!task || !_subagentRunName) return;
+
+  goBtn.disabled = true;
+  const origLabel = goBtn.textContent;
+  goBtn.textContent = 'Running…';
+  if (outEl) {
+    outEl.style.display = 'block';
+    outEl.textContent = 'Running sub-agent…';
+  }
+  try {
+    const result = await apiFetch('/api/subagents/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent: _subagentRunName, task }),
+    });
+    if (outEl) outEl.textContent = result.ok ? result.output : ('[error] ' + (result.error || 'unknown error'));
+    loadSubagentsPanel();
+  } catch (e) {
+    if (outEl) outEl.textContent = '[error] ' + e.message;
+  } finally {
+    goBtn.disabled = false;
+    goBtn.textContent = origLabel || 'Run';
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 connectWS();

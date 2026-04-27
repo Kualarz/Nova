@@ -151,6 +151,18 @@ export interface RoutineToolCall {
   created_at: string;
 }
 
+export interface SubagentRun {
+  id: string;
+  parent_conv_id: string | null;
+  agent_name: string;
+  task: string;
+  result: string | null;
+  error: string | null;
+  status: string;             // 'running' | 'success' | 'error'
+  started_at: string;
+  completed_at: string | null;
+}
+
 export interface CreateRoutineParams {
   name: string;
   description?: string;
@@ -235,6 +247,11 @@ export interface DatabaseProvider {
   listRoutineRuns(routineId: string, limit: number): Promise<RoutineRun[]>;
   insertRoutineToolCall(runId: string, toolName: string, toolArgs: string | null, toolResult: string | null, status: string): Promise<string>;
   listRoutineToolCalls(runId: string): Promise<RoutineToolCall[]>;
+
+  // Sub-agent runs (Phase 4.3)
+  insertSubagentRun(parentConvId: string | null, agentName: string, task: string): Promise<string>;
+  completeSubagentRun(id: string, status: string, result?: string, error?: string): Promise<void>;
+  listSubagentRuns(limit: number): Promise<SubagentRun[]>;
 
   // Stats
   getSessionStats(userId: string): Promise<SessionStats>;

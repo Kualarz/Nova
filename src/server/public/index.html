@@ -90,6 +90,15 @@
           <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="3" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="12" height="3" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M5 5V3M11 5V3M5 12v2M11 12v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           <span class="nav-label">Memory</span>
         </div>
+        <div class="nav-item" data-panel="subagents">
+          <svg class="nav-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="5" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/>
+            <circle cx="11" cy="5" r="2" stroke="currentColor" stroke-width="1.4"/>
+            <circle cx="11" cy="11" r="2" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M7.5 7L9 5.5M7.5 9L9 10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span class="nav-label">Sub-agents</span>
+        </div>
       </div>
     </div>
 
@@ -490,6 +499,47 @@
         <div class="modal-footer">
           <button class="btn" id="routine-cancel" type="button">Cancel</button>
           <button class="btn btn-primary" id="routine-save" type="button">Save routine</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SUB-AGENTS PANEL (Phase 4.3) ────────────────────────────────────── -->
+    <div id="panel-subagents" class="panel">
+      <div class="panel-header">
+        <h2>Sub-agents</h2>
+        <button class="btn btn-sm" id="refresh-subagents-btn" type="button">Refresh</button>
+      </div>
+      <div class="subagents-body">
+        <div class="memory-explainer">
+          <div class="settings-explainer-title">🤖 What are sub-agents?</div>
+          <p>Sub-agents are specialist NOVA personas with focused expertise and a curated tool subset. The main NOVA can spawn them via <code>spawn_subagent</code> for tasks that need their own context — deep research, code generation, planning. Define your own as markdown files in <code>workspace/agents/</code>.</p>
+        </div>
+
+        <h3 style="font-size:13px;color:var(--dim);margin:18px 0 8px;text-transform:uppercase;letter-spacing:0.04em">Available agents</h3>
+        <div id="subagents-catalog" class="subagent-catalog"></div>
+
+        <h3 style="font-size:13px;color:var(--dim);margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.04em">Recent runs</h3>
+        <div id="subagent-runs-list"></div>
+      </div>
+    </div>
+
+    <!-- Manual sub-agent run modal -->
+    <div id="subagent-run-modal" class="modal-overlay" style="display:none">
+      <div class="modal" style="width:540px;max-width:92vw">
+        <div class="modal-header">
+          <span class="modal-title" id="subagent-run-title">Run sub-agent</span>
+          <button id="subagent-run-close" class="modal-close" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="subagent-run-task">Task <span style="color:var(--red)">*</span></label>
+            <textarea id="subagent-run-task" rows="4" placeholder="Describe what you want the sub-agent to do…" style="resize:vertical"></textarea>
+          </div>
+          <div id="subagent-run-output" style="margin-top:6px;font-size:12.5px;color:var(--text);background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:12px;white-space:pre-wrap;max-height:300px;overflow-y:auto;display:none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" id="subagent-run-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="subagent-run-go" type="button">Run</button>
         </div>
       </div>
     </div>

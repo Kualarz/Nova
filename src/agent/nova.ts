@@ -52,16 +52,25 @@ export function isComplexPrompt(text: string): boolean {
 // When the radio is "on-demand", we should expose a tool-discovery tool
 // and load others lazily on demand. For now both modes behave identically.
 
-async function runTurn(
+export async function runTurn(
   systemPrompt: string,
   history: Message[],
   opts: {
     model?: string;
     requestApproval?: (tool: string, args: unknown, description: string) => Promise<boolean>;
     onToolCall?: (name: string, args: unknown, result: string, status: 'success' | 'error' | 'blocked') => Promise<void>;
+    /** Phase 4.3: when set, restrict the tool catalog to these names only.
+     *  Empty array `[]` means "no tools at all" (pure chat). `undefined` means full catalog. */
+    allowedTools?: string[];
   } = {}
 ): Promise<{ text: string; newMessages: Message[]; modelUsed?: string }> {
-  const tools = toApiTools();
+  let tools = toApiTools();
+  if (opts.allowedTools !== undefined) {
+    const allow = new Set(opts.allowedTools);
+    tools = allow.size === 0
+      ? []
+      : tools.filter(t => allow.has(t.function.name));
+  }
   const added: Message[] = [];
   const router = getModelRouter();
 
@@ -71,7 +80,8 @@ async function runTurn(
   ];
 
   for (let i = 0; i < 10; i++) {
-    const response = await router.chat(messages, { tools, model: opts.model });
+    // Pass undefined (not []) when there are no tools — some providers reject empty arrays.
+    const response = await router.chat(messages, { tools: tools.length > 0 ? tools : undefined, model: opts.model });
 
     if (response.stop_reason === 'stop') {
       const text = response.content ?? '';

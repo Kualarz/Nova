@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getConfig } from '../../lib/config.js';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams, RoutineToolCall } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams, RoutineToolCall, SubagentRun } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 export class SupabaseProvider implements DatabaseProvider {
@@ -320,6 +320,16 @@ export class SupabaseProvider implements DatabaseProvider {
   }
   async listRoutineToolCalls(_runId: string): Promise<RoutineToolCall[]> {
     throw new Error('Routines not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+
+  async insertSubagentRun(_parentConvId: string | null, _agentName: string, _task: string): Promise<string> {
+    throw new Error('Sub-agents not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async completeSubagentRun(_id: string, _status: string, _result?: string, _error?: string): Promise<void> {
+    throw new Error('Sub-agents not implemented for Supabase yet — use DATABASE_TYPE=local');
+  }
+  async listSubagentRuns(_limit: number): Promise<SubagentRun[]> {
+    throw new Error('Sub-agents not implemented for Supabase yet — use DATABASE_TYPE=local');
   }
 
   async runMigrations(): Promise<void> {

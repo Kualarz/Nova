@@ -25,6 +25,7 @@ import { weatherTool } from './weather.js';
 import { newsTool } from './news.js';
 import { notionSearchTool, notionGetPageTool, notionCreatePageTool } from './notion.js';
 import { calendarTool, gmailSearchTool } from './google.js';
+import { spawnSubagentTool } from './spawn-subagent.js';
 import { resolveToolPermission } from '../../connectors/permissions.js';
 
 /** Optional knobs passed by `runWebTurn` so the agent loop can request user
@@ -44,6 +45,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
   notionCreatePageTool,
   calendarTool,
   gmailSearchTool,
+  spawnSubagentTool,
 ];
 
 /** Convert to the OpenAI/Ollama tool format used by ModelRouter. */

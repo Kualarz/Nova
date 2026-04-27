@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite/vector';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams, RoutineToolCall } from '../interface.js';
+import type { DatabaseProvider, InsertMemoryParams, MatchMemoriesParams, ConversationMessage, ConversationSummary, InsertMemoryConnectionParams, FindSimilarForEdgesParams, FindSimilarForEdgesResult, FindNeighborMemoriesParams, Hook, InsertHookParams, SessionStats, Task, InsertTaskParams, UpdateTaskParams, Project, ProjectWithStats, Routine, RoutineRun, CreateRoutineParams, UpdateRoutineParams, RoutineToolCall, SubagentRun } from '../interface.js';
 import type { Memory } from '../../memory/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ export class LocalProvider implements DatabaseProvider {
 
     const migrationsDir = join(__dirname, '../migrations');
 
-    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql', '010_routines.sql', '011_routine_tool_calls.sql']) {
+    for (const file of ['001_pglite.sql', '002_phase2.sql', '003_graph_constraint.sql', '004_automation.sql', '005_tasks.sql', '006_projects.sql', '007_companion.sql', '008_project_memory.sql', '009_connector_permissions.sql', '010_routines.sql', '011_routine_tool_calls.sql', '012_subagent_runs.sql']) {
       try {
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await db.exec(sql);
@@ -578,6 +578,38 @@ export class LocalProvider implements DatabaseProvider {
     const r = await db.query<RoutineToolCall>(
       `SELECT * FROM routine_tool_calls WHERE run_id = $1 ORDER BY created_at ASC`,
       [runId]
+    );
+    return r.rows;
+  }
+
+  async insertSubagentRun(parentConvId: string | null, agentName: string, task: string): Promise<string> {
+    const db = await this.getDb();
+    const r = await db.query<{ id: string }>(
+      `INSERT INTO subagent_runs (parent_conv_id, agent_name, task)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [parentConvId, agentName, task]
+    );
+    return r.rows[0]!.id;
+  }
+
+  async completeSubagentRun(id: string, status: string, result?: string, error?: string): Promise<void> {
+    const db = await this.getDb();
+    await db.query(
+      `UPDATE subagent_runs
+         SET status = $1,
+             result = $2,
+             error  = $3,
+             completed_at = now()::text
+       WHERE id = $4`,
+      [status, result ?? null, error ?? null, id]
+    );
+  }
+
+  async listSubagentRuns(limit: number): Promise<SubagentRun[]> {
+    const db = await this.getDb();
+    const r = await db.query<SubagentRun>(
+      `SELECT * FROM subagent_runs ORDER BY started_at DESC LIMIT $1`,
+      [limit]
     );
     return r.rows;
   }

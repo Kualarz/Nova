@@ -607,6 +607,32 @@ export function startWebServer(port = 3000): void {
     } catch (err) { res.status(500).json({ error: (err as Error).message }); }
   });
 
+  // ── Sub-agents (Phase 4.3) ───────────────────────────────────────────────
+  app.get('/api/subagents', async (_req, res) => {
+    try {
+      const { loadSubagents } = await import('../agents/catalog.js');
+      res.json(loadSubagents());
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.get('/api/subagents/runs', async (_req, res) => {
+    try {
+      const db = await getDb();
+      const runs = await db.listSubagentRuns(50);
+      res.json(runs);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
+  app.post('/api/subagents/run', async (req, res) => {
+    try {
+      const { agent, task } = req.body as { agent?: string; task?: string };
+      if (!agent || !task) return res.status(400).json({ error: 'agent + task required' });
+      const { runSubagent } = await import('../agent/tools/spawn-subagent.js');
+      const result = await runSubagent(agent, task);
+      res.json(result);
+    } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+  });
+
   app.get('/api/workspace', (_req, res) => {
     try {
       const config = getConfig();
