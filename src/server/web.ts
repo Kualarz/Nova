@@ -302,6 +302,16 @@ export function startWebServer(port = 3000): void {
     }
   });
 
+  app.get('/api/conversations/:id/messages', async (req, res) => {
+    try {
+      const db = await getDb();
+      const messages = await db.getConversationMessages(req.params.id);
+      res.json(messages.filter(m => m.role === 'user' || m.role === 'assistant'));
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   app.patch('/api/conversations/:id/project', async (req, res) => {
     try {
       const db = await getDb();

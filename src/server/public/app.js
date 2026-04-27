@@ -177,14 +177,7 @@ function switchPanel(name) {
 }
 
 function openSearchModal() {
-  // Reuses the sidebar search bar — toggle it open and focus
-  searchVisible = true;
-  const wrap = document.getElementById('sb-search-wrap');
-  if (wrap) {
-    wrap.classList.remove('hidden');
-    const input = document.getElementById('sb-search-input');
-    if (input) setTimeout(() => input.focus(), 50);
-  }
+  return openCmdk();
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -328,10 +321,7 @@ document.addEventListener('keydown', e => {
 let searchVisible = false;
 document.getElementById('sidebar-search-btn').addEventListener('click', e => {
   e.stopPropagation();
-  searchVisible = !searchVisible;
-  const wrap = document.getElementById('sb-search-wrap');
-  wrap.classList.toggle('hidden', !searchVisible);
-  if (searchVisible) document.getElementById('sb-search-input').focus();
+  openCmdk();
 });
 
 document.getElementById('sb-search-input').addEventListener('input', function () {
@@ -2405,6 +2395,205 @@ document.getElementById('voice-output-toggle')?.addEventListener('click', () => 
 });
 // Restore persisted voice-output toggle on load
 setVoiceOutput(isVoiceOutputOn());
+
+// ── Global ⌘K search modal ───────────────────────────────────────────────────
+const CMDK = { open: false, selectedIndex: 0, flatResults: [], projects: [] };
+
+async function loadProjectsForCmdk() {
+  try { CMDK.projects = await apiFetch('/api/projects'); }
+  catch { CMDK.projects = []; }
+}
+
+async function openCmdk() {
+  await loadProjectsForCmdk();
+  CMDK.open = true;
+  CMDK.selectedIndex = 0;
+  document.getElementById('cmdk-modal').classList.remove('hidden');
+  const input = document.getElementById('cmdk-input');
+  input.value = '';
+  setTimeout(() => input.focus(), 50);
+  renderCmdkResults('');
+}
+
+function closeCmdk() {
+  CMDK.open = false;
+  document.getElementById('cmdk-modal').classList.add('hidden');
+}
+
+function timeBucket(iso) {
+  if (!iso) return 'Older';
+  const t = new Date(iso).getTime();
+  const now = Date.now();
+  const m = (now - t) / 60000;
+  if (m < 1) return 'Just now';
+  if (m < 60) return 'Today';
+  const h = m / 60;
+  if (h < 24) return 'Today';
+  if (h < 48) return 'Yesterday';
+  const d = h / 24;
+  if (d < 7) return 'Past week';
+  if (d < 30) return 'Past month';
+  return 'Older';
+}
+
+const BUCKET_ORDER = ['Just now', 'Today', 'Yesterday', 'Past week', 'Past month', 'Older'];
+
+function renderCmdkResults(query) {
+  const q = query.toLowerCase().trim();
+  const resultsEl = document.getElementById('cmdk-results');
+  const allConvs = (typeof _allConversations !== 'undefined' ? _allConversations : []) || [];
+
+  const projects = q
+    ? CMDK.projects.filter(p => (p.name || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q))
+    : CMDK.projects.slice(0, 4);
+
+  const chats = q
+    ? allConvs.filter(c => {
+        const title = getTitle(c.id, c.first_message || '');
+        return (title || '').toLowerCase().includes(q);
+      })
+    : allConvs.slice(0, 12);
+
+  if (!projects.length && !chats.length) {
+    resultsEl.innerHTML = `<div class="cmdk-empty">No matches for "${escapeHtml(query)}"</div>`;
+    CMDK.flatResults = [];
+    return;
+  }
+
+  const grouped = {};
+  for (const c of chats) {
+    const bucket = timeBucket(c.started_at || c.ended_at);
+    (grouped[bucket] ||= []).push(c);
+  }
+
+  let html = '';
+  CMDK.flatResults = [];
+  let idx = 0;
+
+  if (projects.length) {
+    html += `<div class="cmdk-section-label">Projects</div>`;
+    for (const p of projects) {
+      const sel = idx === CMDK.selectedIndex ? ' selected' : '';
+      html += `<div class="cmdk-result${sel}" data-idx="${idx}" data-type="project" data-id="${escapeHtml(p.id)}">
+        <div class="cmdk-result-icon">📁</div>
+        <div class="cmdk-result-body">
+          <div class="cmdk-result-title">${escapeHtml(p.name)}</div>
+          <div class="cmdk-result-subtitle">${escapeHtml((p.description || '').slice(0, 90))}</div>
+        </div>
+        <div class="cmdk-result-time">${p.chat_count || 0} chat${p.chat_count === 1 ? '' : 's'}</div>
+      </div>`;
+      CMDK.flatResults.push({ type: 'project', id: p.id });
+      idx++;
+    }
+  }
+
+  for (const bucket of BUCKET_ORDER) {
+    const list = grouped[bucket];
+    if (!list || !list.length) continue;
+    html += `<div class="cmdk-section-label">${bucket}</div>`;
+    for (const c of list) {
+      const title = getTitle(c.id, c.first_message ? c.first_message.slice(0, 70).replace(/\n/g, ' ') : 'Untitled chat');
+      const sel = idx === CMDK.selectedIndex ? ' selected' : '';
+      const isFirst = idx === CMDK.selectedIndex;
+      html += `<div class="cmdk-result${sel}" data-idx="${idx}" data-type="chat" data-id="${escapeHtml(c.id)}">
+        <div class="cmdk-result-icon">💬</div>
+        <div class="cmdk-result-body"><div class="cmdk-result-title">${escapeHtml(title)}</div></div>
+        ${isFirst ? '<div class="cmdk-result-shortcut">↵</div>' : '<div class="cmdk-result-time">' + (c.started_at ? fmtAge(c.started_at) : '') + '</div>'}
+      </div>`;
+      CMDK.flatResults.push({ type: 'chat', id: c.id });
+      idx++;
+    }
+  }
+
+  resultsEl.innerHTML = html;
+
+  resultsEl.querySelectorAll('.cmdk-result').forEach(el => {
+    el.addEventListener('click', () => activateCmdkResult(parseInt(el.dataset.idx, 10)));
+    el.addEventListener('mouseenter', () => {
+      CMDK.selectedIndex = parseInt(el.dataset.idx, 10);
+      updateCmdkSelection();
+    });
+  });
+}
+
+function updateCmdkSelection() {
+  document.querySelectorAll('.cmdk-result').forEach((el, i) => {
+    el.classList.toggle('selected', i === CMDK.selectedIndex);
+  });
+  const sel = document.querySelector('.cmdk-result.selected');
+  if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+
+function activateCmdkResult(idx) {
+  const r = CMDK.flatResults[idx];
+  if (!r) return;
+  closeCmdk();
+  if (r.type === 'project') {
+    switchPanel('workspace');
+    setTimeout(() => openProject(r.id), 50);
+  } else if (r.type === 'chat') {
+    loadConversationHistory(r.id);
+  }
+}
+
+async function loadConversationHistory(conversationId) {
+  switchPanel('chat');
+  try {
+    const data = await apiFetch('/api/conversations/' + encodeURIComponent(conversationId) + '/messages');
+    document.getElementById('chat-messages').innerHTML = '';
+    _hasMessages = data.length > 0;
+    setWelcome(!_hasMessages);
+    if (ws) { ws.close(); }
+    for (const m of data) {
+      if (m.role === 'user') appendChatMsg('user', m.content);
+      else if (m.role === 'assistant') appendChatMsg('nova', m.content);
+    }
+    let banner = document.getElementById('history-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'history-banner';
+      banner.className = 'companion-banner';
+      banner.style.background = 'linear-gradient(90deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05))';
+      banner.style.borderColor = 'rgba(245,158,11,0.2)';
+      banner.style.color = 'var(--amber)';
+      banner.innerHTML = `<span>👁</span> Viewing past conversation (read-only) · <a href="#" id="exit-history" style="color:var(--accent);text-decoration:underline">Start new chat</a>`;
+      document.getElementById('panel-chat').prepend(banner);
+      document.getElementById('exit-history').addEventListener('click', e => {
+        e.preventDefault();
+        banner.remove();
+        document.getElementById('chat-messages').innerHTML = '';
+        _hasMessages = false;
+        setWelcome(true);
+        connectWS();
+      });
+    }
+  } catch (err) {
+    alert('Failed to load conversation: ' + err.message);
+  }
+}
+
+document.getElementById('cmdk-input')?.addEventListener('input', function () {
+  CMDK.selectedIndex = 0;
+  renderCmdkResults(this.value);
+});
+
+document.getElementById('cmdk-input')?.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); CMDK.selectedIndex = Math.min(CMDK.flatResults.length - 1, CMDK.selectedIndex + 1); updateCmdkSelection(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); CMDK.selectedIndex = Math.max(0, CMDK.selectedIndex - 1); updateCmdkSelection(); }
+  else if (e.key === 'Enter') { e.preventDefault(); activateCmdkResult(CMDK.selectedIndex); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeCmdk(); }
+});
+
+document.getElementById('cmdk-modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('cmdk-modal')) closeCmdk();
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (CMDK.open) closeCmdk(); else openCmdk();
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 connectWS();

@@ -1182,6 +1182,23 @@
   </button>
 </div>
 
+<!-- Global Ctrl+K search modal -->
+<div id="cmdk-modal" class="cmdk-modal hidden">
+  <div class="cmdk-card">
+    <div class="cmdk-input-wrap">
+      <svg class="cmdk-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <input id="cmdk-input" type="text" placeholder="Search chats and projects" autocomplete="off">
+      <span class="cmdk-shortcut-hint">esc</span>
+    </div>
+    <div class="cmdk-results" id="cmdk-results">
+      <div class="cmdk-empty">Start typing to search</div>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
