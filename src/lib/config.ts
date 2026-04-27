@@ -42,6 +42,11 @@ const ConfigSchema = z.object({
   DISCORD_BOT_TOKEN: z.string().default(''),
   DISCORD_USER_ID: z.string().default(''),
 
+  // Phase 4.4 — server-side voice
+  WHISPER_API_KEY: z.string().default(''),     // OpenAI API key for Whisper STT
+  ELEVENLABS_API_KEY: z.string().default(''),  // ElevenLabs API key for TTS
+  ELEVENLABS_VOICE_ID: z.string().default('21m00Tcm4TlvDq8ikWAM'),  // Default = Rachel
+
   // Phase 3 — server options
   NOVA_WORKFLOWS: z.enum(['on', 'off']).default('on'),
 

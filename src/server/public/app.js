@@ -13,10 +13,107 @@ let currentPanel = 'chat';
 // to reconnect to the companion conversation or a fresh one.
 let _isCompanionMode = false;
 
-// ── Voice input (Web Speech API) ──────────────────────────────────────────────
-// Browser-native; no server work. Click to start, click again or 3s of silence
-// to stop. Final transcript appears in the chat textarea so the user can edit
-// before sending.
+// ── Voice input — server-side Whisper (preferred) with browser fallback ──────
+// Phase 4.4: when a Whisper key is configured, we record audio with
+// MediaRecorder and POST the blob to /api/voice/transcribe. If the server
+// isn't configured (503) or anything fails, we transparently fall back to the
+// browser's SpeechRecognition (defined below).
+let _mediaRecorder = null;
+let _audioChunks = [];
+
+async function startWhisperRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    _mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    _audioChunks = [];
+
+    _mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) _audioChunks.push(e.data);
+    };
+
+    _mediaRecorder.onstop = async () => {
+      const btn = document.getElementById('chat-voice-btn');
+      if (btn) btn.classList.remove('recording');
+      stream.getTracks().forEach(t => t.stop());
+      const recorder = _mediaRecorder;
+      const audioBlob = new Blob(_audioChunks, { type: (recorder && recorder.mimeType) || 'audio/webm' });
+      _mediaRecorder = null;
+      _audioChunks = [];
+      if (audioBlob.size === 0) return;
+
+      if (btn) {
+        btn.classList.add('transcribing');
+        btn.title = 'Transcribing…';
+      }
+
+      try {
+        const resp = await fetch('/api/voice/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': audioBlob.type,
+            'x-audio-mime': audioBlob.type,
+          },
+          body: audioBlob,
+        });
+        if (resp.status === 503) {
+          // No API key — fall back to browser API for the next click.
+          startVoiceInput();
+          return;
+        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const input = document.getElementById('chat-input');
+        const cur = input.value.trim();
+        input.value = (cur ? cur + ' ' : '') + (data.text || '').trim();
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+        input.focus();
+      } catch (err) {
+        console.warn('Whisper failed, falling back to browser:', err);
+        startVoiceInput();
+      } finally {
+        if (btn) {
+          btn.classList.remove('transcribing');
+          btn.title = 'Voice input';
+        }
+      }
+    };
+
+    _mediaRecorder.start();
+    const btn = document.getElementById('chat-voice-btn');
+    if (btn) btn.classList.add('recording');
+  } catch (err) {
+    console.warn('MediaRecorder unavailable, using browser SpeechRecognition:', err);
+    startVoiceInput();
+  }
+}
+
+function stopWhisperRecording() {
+  if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+    try { _mediaRecorder.stop(); } catch {}
+  }
+}
+
+// Smarter mic-button toggle: if anything is recording, stop it. Otherwise
+// try Whisper first; on 503/error it auto-falls-back to browser SR.
+async function toggleVoiceInput() {
+  if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+    stopWhisperRecording();
+    return;
+  }
+  if (_recognition) {
+    stopVoiceInput();
+    return;
+  }
+  await startWhisperRecording();
+}
+
+// ── Voice input (Web Speech API fallback) ────────────────────────────────────
+// Browser-native; no server work. Used when WHISPER_API_KEY isn't configured
+// or the MediaRecorder/Whisper path fails.
 let _recognition  = null;
 let _silenceTimer = null;
 function startVoiceInput() {
@@ -80,14 +177,20 @@ function stopVoiceInput() {
 function isVoiceOutputOn() {
   return localStorage.getItem('nova:voice-output') === 'on';
 }
+let _ttsAudio = null;          // currently-playing HTMLAudioElement (ElevenLabs)
+let _ttsServerBroken = false;  // remember if server failed once this session
+
 function setVoiceOutput(on) {
   localStorage.setItem('nova:voice-output', on ? 'on' : 'off');
   const btn = document.getElementById('voice-output-toggle');
   if (btn) btn.classList.toggle('voice-on', on);
-  if (!on && window.speechSynthesis) window.speechSynthesis.cancel();
+  if (!on) {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (_ttsAudio) { try { _ttsAudio.pause(); } catch {} _ttsAudio = null; }
+  }
 }
-function speakText(text) {
-  if (!isVoiceOutputOn() || !window.speechSynthesis) return;
+async function speakText(text) {
+  if (!isVoiceOutputOn()) return;
   // Strip markdown so TTS doesn't read out backticks, asterisks, code blocks.
   const clean = String(text || '')
     .replace(/```[\s\S]*?```/g, '. code block omitted. ')
@@ -95,6 +198,35 @@ function speakText(text) {
     .replace(/\n+/g, '. ')
     .trim();
   if (!clean) return;
+
+  // Prefer server-side ElevenLabs unless we already saw it fail this session.
+  if (!_ttsServerBroken) {
+    try {
+      const resp = await fetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: clean }),
+      });
+      if (resp.status === 503) {
+        _ttsServerBroken = true;
+      } else if (resp.ok) {
+        const blob = await resp.blob();
+        if (_ttsAudio) { try { _ttsAudio.pause(); } catch {} }
+        const url = URL.createObjectURL(blob);
+        _ttsAudio = new Audio(url);
+        _ttsAudio.onended = () => URL.revokeObjectURL(url);
+        await _ttsAudio.play();
+        return;
+      } else {
+        _ttsServerBroken = true;
+      }
+    } catch {
+      _ttsServerBroken = true;
+    }
+  }
+
+  // Fallback: browser SpeechSynthesis.
+  if (!window.speechSynthesis) return;
   const utter = new SpeechSynthesisUtterance(clean);
   utter.rate  = 1.05;
   utter.pitch = 1.0;
@@ -1991,6 +2123,9 @@ async function loadSettings() {
     setField('TELEGRAM_CHAT_ID',         cfg.TELEGRAM_CHAT_ID);
     setField('DISCORD_BOT_TOKEN',        cfg.DISCORD_BOT_TOKEN);
     setField('DISCORD_USER_ID',          cfg.DISCORD_USER_ID);
+    setField('WHISPER_API_KEY',          cfg.WHISPER_API_KEY);
+    setField('ELEVENLABS_API_KEY',       cfg.ELEVENLABS_API_KEY);
+    setField('ELEVENLABS_VOICE_ID',      cfg.ELEVENLABS_VOICE_ID);
     setField('NOVA_WORKFLOWS',           cfg.NOVA_WORKFLOWS);
     setField('PROFILE_NAME',             cfg.PROFILE_NAME);
     setField('PROFILE_BACKGROUND',       cfg.PROFILE_BACKGROUND);
@@ -2095,7 +2230,9 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     'SUPABASE_SERVICE_ROLE_KEY','NOVA_WORKSPACE_PATH','GOOGLE_CREDENTIALS_PATH',
     'NOTION_API_KEY','WEB_SEARCH_API_KEY','OPENWEATHER_API_KEY',
     'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID',
-    'DISCORD_BOT_TOKEN','DISCORD_USER_ID','NOVA_WORKFLOWS',
+    'DISCORD_BOT_TOKEN','DISCORD_USER_ID',
+    'WHISPER_API_KEY','ELEVENLABS_API_KEY','ELEVENLABS_VOICE_ID',
+    'NOVA_WORKFLOWS',
     'PROFILE_NAME','PROFILE_BACKGROUND','PROFILE_STYLE',
     'PROFILE_FULL_NAME','PROFILE_NICKNAME','PROFILE_WORK','PROFILE_PREFERENCES',
   ];
@@ -2545,7 +2682,7 @@ async function loadCustomizeConnectors() {
 }
 
 // ── Voice button wiring ───────────────────────────────────────────────────────
-document.getElementById('chat-voice-btn')?.addEventListener('click', startVoiceInput);
+document.getElementById('chat-voice-btn')?.addEventListener('click', toggleVoiceInput);
 document.getElementById('voice-output-toggle')?.addEventListener('click', () => {
   setVoiceOutput(!isVoiceOutputOn());
 });

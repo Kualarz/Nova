@@ -1626,6 +1626,12 @@ button.sidebar-user {
 .toolbar-icon-btn.voice-on { color: var(--accent); }
 .toolbar-icon-btn.voice-on .vo-waves { stroke: var(--accent); }
 
+/* Phase 4.4: Whisper transcription in flight */
+.toolbar-icon-btn.transcribing {
+  color: var(--accent);
+  animation: voicePulse 1s ease-in-out infinite;
+}
+
 /* Companion sidebar item — subtle gradient highlight */
 .nav-item-companion {
   background: linear-gradient(90deg, rgba(167,139,250,0.1), rgba(167,139,250,0.02));

@@ -847,6 +847,33 @@
           </div>
         </div>
 
+        <!-- Voice (Phase 4.4) -->
+        <div class="settings-subsection">
+          <div class="settings-subsection-title">Voice (optional)</div>
+          <div class="hint" style="margin-bottom:12px">Use Whisper for speech-to-text and ElevenLabs for natural-sounding replies. Falls back to your browser's built-in voice when keys aren't set.</div>
+          <div class="field">
+            <label for="cfg-WHISPER_API_KEY">Whisper API Key (OpenAI)</label>
+            <div class="flex-row">
+              <input id="cfg-WHISPER_API_KEY" type="password" autocomplete="off" placeholder="sk-…">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-WHISPER_API_KEY">show</button>
+            </div>
+            <div class="hint">Get one at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">platform.openai.com</a> · ~$0.006/min for STT</div>
+          </div>
+          <div class="field">
+            <label for="cfg-ELEVENLABS_API_KEY">ElevenLabs API Key</label>
+            <div class="flex-row">
+              <input id="cfg-ELEVENLABS_API_KEY" type="password" autocomplete="off" placeholder="sk_…">
+              <button class="btn btn-sm toggle-secret" type="button" data-for="cfg-ELEVENLABS_API_KEY">show</button>
+            </div>
+            <div class="hint">Get one at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" style="color:var(--accent)">elevenlabs.io</a> · free tier 10k chars/month</div>
+          </div>
+          <div class="field">
+            <label for="cfg-ELEVENLABS_VOICE_ID">ElevenLabs Voice ID</label>
+            <input id="cfg-ELEVENLABS_VOICE_ID" type="text" placeholder="21m00Tcm4TlvDq8ikWAM (Rachel)">
+            <div class="hint">Default = Rachel. Browse voices in your ElevenLabs dashboard.</div>
+          </div>
+        </div>
+
         <div class="field">
           <label for="cfg-NOVA_WORKFLOWS">Workflows</label>
           <select id="cfg-NOVA_WORKFLOWS">

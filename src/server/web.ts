@@ -55,6 +55,8 @@ const SECRET_KEYS = new Set([
   'NOTION_API_KEY',
   'WEB_SEARCH_API_KEY',
   'OPENWEATHER_API_KEY',
+  'WHISPER_API_KEY',
+  'ELEVENLABS_API_KEY',
 ]);
 
 // Keys the settings form is allowed to overwrite
@@ -68,6 +70,7 @@ const WRITABLE_KEYS = new Set([
   'WEB_SEARCH_API_KEY', 'OPENWEATHER_API_KEY',
   'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID',
   'DISCORD_BOT_TOKEN', 'DISCORD_USER_ID',
+  'WHISPER_API_KEY', 'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_ID',
   'NOVA_WORKFLOWS',
   'PROFILE_NAME', 'PROFILE_BACKGROUND', 'PROFILE_STYLE',
   'PROFILE_FULL_NAME', 'PROFILE_NICKNAME', 'PROFILE_WORK', 'PROFILE_PREFERENCES',
@@ -678,6 +681,95 @@ export function startWebServer(port = 3000): void {
       res.json({ ok: true, updated: Object.keys(updates) });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── Phase 4.4: server-side voice ───────────────────────────────────────────
+  // Whisper STT — accepts raw audio bytes (any codec the browser produced),
+  // forwards to OpenAI as multipart/form-data, returns the transcript.
+  app.post('/api/voice/transcribe', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
+    try {
+      const config = getConfig();
+      if (!config.WHISPER_API_KEY) {
+        return res.status(503).json({ error: 'WHISPER_API_KEY not configured' });
+      }
+      const buf = req.body as Buffer;
+      if (!buf || !buf.length) return res.status(400).json({ error: 'no audio body' });
+      const contentType = req.header('x-audio-mime') || 'audio/webm';
+
+      const fd = new FormData();
+      const blob = new Blob([new Uint8Array(buf)], { type: contentType });
+      fd.append('file', blob, 'audio.webm');
+      fd.append('model', 'whisper-1');
+
+      const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${config.WHISPER_API_KEY}` },
+        body: fd as unknown as ReadableStream,
+      });
+      if (!resp.ok) {
+        const err = await resp.text().catch(() => '');
+        return res.status(resp.status).json({ error: `Whisper error: ${err.slice(0, 300)}` });
+      }
+      const data = await resp.json() as { text?: string };
+      res.json({ text: data.text ?? '' });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ElevenLabs TTS — accepts JSON {text}, returns audio/mpeg bytes.
+  app.post('/api/voice/synthesize', async (req, res) => {
+    try {
+      const config = getConfig();
+      if (!config.ELEVENLABS_API_KEY) {
+        return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
+      }
+      const { text } = req.body as { text?: string };
+      if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+      // ElevenLabs caps ~5000 chars/request — clip to be safe.
+      const clipped = text.slice(0, 4500);
+      const voiceId = config.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+
+      const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': config.ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text: clipped,
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.text().catch(() => '');
+        return res.status(resp.status).json({ error: `ElevenLabs error: ${err.slice(0, 300)}` });
+      }
+      const audio = Buffer.from(await resp.arrayBuffer());
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', audio.length);
+      res.send(audio);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // List ElevenLabs voices (for an eventual picker UI).
+  app.get('/api/voice/voices', async (_req, res) => {
+    try {
+      const config = getConfig();
+      if (!config.ELEVENLABS_API_KEY) return res.json([]);
+      const resp = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: { 'xi-api-key': config.ELEVENLABS_API_KEY },
+      });
+      if (!resp.ok) return res.json([]);
+      const data = await resp.json() as { voices: Array<{ voice_id: string; name: string; labels?: Record<string, string> }> };
+      res.json(data.voices.map(v => ({ id: v.voice_id, name: v.name, labels: v.labels ?? {} })));
+    } catch {
+      res.json([]);
     }
   });
 
